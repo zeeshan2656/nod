@@ -470,17 +470,25 @@ exports.deleteVideo = async (req, res) => {
  */
 exports.likeVideo = async (req, res) => {
   const videoId = parseInt(req.params.id);
-  const userId = req.user.id;
+  const userId = req.user ? req.user.id : null;
+  const ipAddress = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
 
   if (isNaN(videoId)) return res.status(400).json({ error: 'Invalid video ID.' });
 
   try {
     // Check if already liked
-    const [likes] = await db.query(
-      'SELECT id FROM likes WHERE user_id = ? AND item_type = "video" AND item_id = ?',
-      [userId, videoId]
-    );
+    let query = '';
+    let params = [];
 
+    if (userId) {
+      query = 'SELECT id FROM likes WHERE user_id = ? AND item_type = "video" AND item_id = ?';
+      params = [userId, videoId];
+    } else {
+      query = 'SELECT id FROM likes WHERE user_id IS NULL AND ip_address = ? AND item_type = "video" AND item_id = ?';
+      params = [ipAddress, videoId];
+    }
+
+    const [likes] = await db.query(query, params);
     let liked = false;
 
     if (likes.length > 0) {
@@ -490,8 +498,8 @@ exports.likeVideo = async (req, res) => {
     } else {
       // Like
       await db.query(
-        'INSERT INTO likes (user_id, item_type, item_id) VALUES (?, "video", ?)',
-        [userId, videoId]
+        'INSERT INTO likes (user_id, ip_address, item_type, item_id) VALUES (?, ?, "video", ?)',
+        [userId, ipAddress, videoId]
       );
       await db.query('UPDATE videos SET likes_count = likes_count + 1 WHERE id = ?', [videoId]);
       liked = true;

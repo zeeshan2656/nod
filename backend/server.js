@@ -4,7 +4,13 @@ const helmet = require('helmet');
 const compression = require('compression');
 const path = require('path');
 const fs = require('fs');
-require('dotenv').config();
+// Robust production environment loader (cPanel compatible)
+const envPath = fs.existsSync(path.join(__dirname, '.env'))
+  ? path.join(__dirname, '.env')
+  : (fs.existsSync(path.join(__dirname, '..', '.env'))
+      ? path.join(__dirname, '..', '.env')
+      : path.join(process.cwd(), '.env'));
+require('dotenv').config({ path: envPath });
 
 // Initialize Express App
 const app = express();

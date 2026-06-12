@@ -1,5 +1,16 @@
 const { createClient } = require('redis');
-require('dotenv').config();
+const path = require('path');
+const fs = require('fs');
+
+// Robust production environment loader (cPanel compatible)
+const envPath = fs.existsSync(path.join(__dirname, '.env'))
+  ? path.join(__dirname, '.env')
+  : (fs.existsSync(path.join(__dirname, '..', '.env'))
+      ? path.join(__dirname, '..', '.env')
+      : (fs.existsSync(path.join(__dirname, '..', '..', '.env'))
+          ? path.join(__dirname, '..', '..', '.env')
+          : path.join(process.cwd(), '.env')));
+require('dotenv').config({ path: envPath });
 
 class MemoryCache {
   constructor() {

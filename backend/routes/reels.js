@@ -60,10 +60,13 @@ router.post('/:id/view', reelController.incrementReelView);
 // 4. Delete a reel and its HLS segments (Admin-only)
 router.delete('/:id', requireAdmin, reelController.deleteReel);
 
-// 5. Like/Unlike a reel (Authenticated users)
-router.post('/:id/like', requireAuth, reelController.likeReel);
+// 5. Like/Unlike a reel (Authenticated/Anonymous allowed)
+router.post('/:id/like', authenticateToken, reelController.likeReel);
 
 // 6. Update a reel (Admin-only)
 router.put('/:id', requireAdmin, reelController.updateReel);
+
+// 7. Stream dynamically extracted reel thumbnail frame
+router.get('/:id/thumbnail', reelController.streamThumbnail);
 
 module.exports = router;

@@ -21,9 +21,9 @@ exports.getComments = async (req, res) => {
     }
 
     let query = `
-      SELECT c.*, u.username 
+      SELECT c.*, COALESCE(u.username, 'Guest') as username 
       FROM comments c
-      JOIN users u ON c.user_id = u.id
+      LEFT JOIN users u ON c.user_id = u.id
       WHERE 
     `;
     const params = [];
@@ -77,7 +77,8 @@ exports.getComments = async (req, res) => {
  */
 exports.addComment = async (req, res) => {
   const { video_id, reel_id, parent_id, content } = req.body;
-  const userId = req.user.id;
+  const userId = req.user ? req.user.id : null;
+  const ipAddress = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
 
   if (!content || content.trim().length === 0) {
     return res.status(400).json({ error: 'Comment content cannot be empty.' });
@@ -85,13 +86,14 @@ exports.addComment = async (req, res) => {
 
   try {
     const [result] = await db.query(
-      `INSERT INTO comments (video_id, reel_id, parent_id, user_id, content) 
-       VALUES (?, ?, ?, ?, ?)`,
+      `INSERT INTO comments (video_id, reel_id, parent_id, user_id, ip_address, content) 
+       VALUES (?, ?, ?, ?, ?, ?)`,
       [
         video_id ? parseInt(video_id) : null,
         reel_id ? parseInt(reel_id) : null,
         parent_id ? parseInt(parent_id) : null,
         userId,
+        ipAddress,
         content.trim()
       ]
     );
@@ -109,7 +111,7 @@ exports.addComment = async (req, res) => {
 
     // Return the created comment
     const [newCommentRows] = await db.query(
-      `SELECT c.*, u.username FROM comments c JOIN users u ON c.user_id = u.id WHERE c.id = ?`,
+      `SELECT c.*, COALESCE(u.username, 'Guest') as username FROM comments c LEFT JOIN users u ON c.user_id = u.id WHERE c.id = ?`,
       [result.insertId]
     );
 

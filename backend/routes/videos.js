@@ -71,8 +71,8 @@ router.put('/:id', requireAdmin, videoController.updateVideo);
 // 7. Delete video (Admin-only)
 router.delete('/:id', requireAdmin, videoController.deleteVideo);
 
-// 8. Like/Unlike video (Authenticated users)
-router.post('/:id/like', requireAuth, videoController.likeVideo);
+// 8. Like/Unlike video (Authenticated/Anonymous allowed)
+router.post('/:id/like', authenticateToken, videoController.likeVideo);
 
 // 9. Increment view count on video playback
 router.post('/:id/view', videoController.incrementVideoView);

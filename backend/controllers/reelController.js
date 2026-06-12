@@ -2,7 +2,7 @@ const db = require('../config/db');
 const cache = require('../config/cache');
 const path = require('path');
 const fs = require('fs');
-const { getVideoMetadata } = require('../utils/ffmpegHelper');
+const { getVideoMetadata, extractFrameToBuffer } = require('../utils/ffmpegHelper');
 const transcodeQueue = require('../utils/transcodeQueue');
 
 // Folders
@@ -223,16 +223,24 @@ exports.deleteReel = async (req, res) => {
  */
 exports.likeReel = async (req, res) => {
   const reelId = parseInt(req.params.id);
-  const userId = req.user.id;
+  const userId = req.user ? req.user.id : null;
+  const ipAddress = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
 
   if (isNaN(reelId)) return res.status(400).json({ error: 'Invalid reel ID.' });
 
   try {
-    const [likes] = await db.query(
-      'SELECT id FROM likes WHERE user_id = ? AND item_type = "reel" AND item_id = ?',
-      [userId, reelId]
-    );
+    let query = '';
+    let params = [];
 
+    if (userId) {
+      query = 'SELECT id FROM likes WHERE user_id = ? AND item_type = "reel" AND item_id = ?';
+      params = [userId, reelId];
+    } else {
+      query = 'SELECT id FROM likes WHERE user_id IS NULL AND ip_address = ? AND item_type = "reel" AND item_id = ?';
+      params = [ipAddress, reelId];
+    }
+
+    const [likes] = await db.query(query, params);
     let liked = false;
 
     if (likes.length > 0) {
@@ -240,8 +248,8 @@ exports.likeReel = async (req, res) => {
       await db.query('UPDATE reels SET likes_count = GREATEST(likes_count - 1, 0) WHERE id = ?', [reelId]);
     } else {
       await db.query(
-        'INSERT INTO likes (user_id, item_type, item_id) VALUES (?, "reel", ?)',
-        [userId, reelId]
+        'INSERT INTO likes (user_id, ip_address, item_type, item_id) VALUES (?, ?, "reel", ?)',
+        [userId, ipAddress, reelId]
       );
       await db.query('UPDATE reels SET likes_count = likes_count + 1 WHERE id = ?', [reelId]);
       liked = true;
@@ -276,5 +284,58 @@ exports.updateReel = async (req, res) => {
   } catch (err) {
     console.error('Update reel error:', err);
     res.status(500).json({ error: 'Database error updating reel.' });
+  }
+};
+
+/**
+ * Stream dynamically extracted thumbnail for a reel (Admin/Public)
+ */
+exports.streamThumbnail = async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) return res.status(400).json({ error: 'Invalid reel ID.' });
+
+  const cacheKey = `reel_thumb_${id}`;
+
+  try {
+    // 1. Serves from cache
+    const cachedBuffer = await cache.get(cacheKey);
+    if (cachedBuffer) {
+      res.setHeader('Content-Type', 'image/jpeg');
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      return res.send(Buffer.from(cachedBuffer, 'base64'));
+    }
+
+    // 2. Fetch reel details
+    const [rows] = await db.query('SELECT file_path, duration, status FROM reels WHERE id = ?', [id]);
+    const reel = rows[0];
+
+    if (!reel) {
+      return res.status(404).json({ error: 'Reel not found.' });
+    }
+
+    let relativePath = reel.file_path;
+    if (relativePath.startsWith('/')) {
+      relativePath = relativePath.substring(1);
+    }
+    const sourcePath = path.resolve(__dirname, '..', relativePath);
+
+    if (!fs.existsSync(sourcePath) && reel.status !== 'ready') {
+      return res.status(404).json({ error: 'Reel source file is not available yet.' });
+    }
+
+    // Capture frame at 10% of duration (or 1 second if short)
+    const timestamp = Math.min(1.0, reel.duration * 0.1);
+
+    const imgBuffer = await extractFrameToBuffer(sourcePath, timestamp);
+
+    // Cache the buffer
+    await cache.set(cacheKey, imgBuffer.toString('base64'), 86400 * 30); // 30 days cache
+
+    res.setHeader('Content-Type', 'image/jpeg');
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    res.send(imgBuffer);
+  } catch (err) {
+    console.error('Reel frame extraction failed:', err);
+    res.status(500).json({ error: 'Could not extract reel thumbnail.' });
   }
 };

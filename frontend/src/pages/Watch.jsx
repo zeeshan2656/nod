@@ -300,11 +300,6 @@ export default function Watch() {
 
   // Like video handler
   const handleLike = async () => {
-    if (!user) {
-      setToast({ message: 'Please sign in to like videos.', type: 'danger' });
-      return;
-    }
-
     try {
       const response = await api.post(`/videos/${id}/like`);
       const { liked: isLiked } = response.data;
@@ -327,10 +322,6 @@ export default function Watch() {
   // Comment additions
   const handleAddComment = async (e) => {
     e.preventDefault();
-    if (!user) {
-      setToast({ message: 'Please sign in to comment.', type: 'danger' });
-      return;
-    }
     if (!newComment.trim()) return;
 
     try {
@@ -348,10 +339,6 @@ export default function Watch() {
 
   const handleAddReply = async (commentId) => {
     const text = replyText[commentId];
-    if (!user) {
-      setToast({ message: 'Please sign in to reply.', type: 'danger' });
-      return;
-    }
     if (!text || !text.trim()) return;
 
     try {
@@ -409,14 +396,12 @@ export default function Watch() {
         <div className="comment-content">{comment.content}</div>
         
         <div className="comment-actions">
-          {user && (
-            <span 
-              className="comment-action-btn"
-              onClick={() => setActiveReplyId(activeReplyId === comment.id ? null : comment.id)}
-            >
-              Reply
-            </span>
-          )}
+          <span 
+            className="comment-action-btn"
+            onClick={() => setActiveReplyId(activeReplyId === comment.id ? null : comment.id)}
+          >
+            Reply
+          </span>
           
           {(user && (user.id === comment.user_id || user.role === 'admin')) && (
             <span 
@@ -744,18 +729,16 @@ export default function Watch() {
               <form onSubmit={handleAddComment} className="comment-input-box">
                 <textarea
                   className="comment-textarea"
-                  placeholder={user ? "Add a public comment..." : "Sign in to add a comment..."}
+                  placeholder="Add a public comment..."
                   value={newComment}
                   onChange={(e) => setNewComment(e.target.value)}
-                  disabled={!user}
                   rows="2"
                   required
                 />
                 <button 
                   type="submit" 
-                  className={`btn btn-primary ${!user ? 'btn-disabled' : ''}`}
+                  className="btn btn-primary"
                   style={{ alignSelf: 'flex-end', height: '40px' }}
-                  disabled={!user}
                 >
                   Comment
                 </button>

@@ -1,5 +1,16 @@
 const jwt = require('jsonwebtoken');
-require('dotenv').config();
+const path = require('path');
+const fs = require('fs');
+
+// Robust production environment loader (cPanel compatible)
+const envPath = fs.existsSync(path.join(__dirname, '.env'))
+  ? path.join(__dirname, '.env')
+  : (fs.existsSync(path.join(__dirname, '..', '.env'))
+      ? path.join(__dirname, '..', '.env')
+      : (fs.existsSync(path.join(__dirname, '..', '..', '.env'))
+          ? path.join(__dirname, '..', '..', '.env')
+          : path.join(process.cwd(), '.env')));
+require('dotenv').config({ path: envPath });
 
 const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_jwt_key_for_video_platform_123!@#';
 
