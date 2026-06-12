@@ -81,7 +81,23 @@ app.get('/health', (req, res) => {
   res.json({ status: 'healthy', time: new Date() });
 });
 
-// 404 Route handler
+// Serve static React frontend files from 'public' directory (cPanel single-domain deployment)
+const frontendPath = path.join(__dirname, 'public');
+app.use(express.static(frontendPath));
+
+// React SPA fallback routing (must be placed after API routes, before 404 handler)
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api') || req.path.includes('.')) {
+    return next();
+  }
+  const indexPath = path.join(frontendPath, 'index.html');
+  if (fs.existsSync(indexPath)) {
+    return res.sendFile(indexPath);
+  }
+  next();
+});
+
+// 404 Route handler (for API requests and missing static files)
 app.use((req, res) => {
   res.status(404).json({ error: 'Endpoint not found.' });
 });
