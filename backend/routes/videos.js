@@ -74,4 +74,7 @@ router.delete('/:id', requireAdmin, videoController.deleteVideo);
 // 8. Like/Unlike video (Authenticated users)
 router.post('/:id/like', requireAuth, videoController.likeVideo);
 
+// 9. Increment view count on video playback
+router.post('/:id/view', videoController.incrementVideoView);
+
 module.exports = router;

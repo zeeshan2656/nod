@@ -8,43 +8,104 @@ export default function AdminDashboard() {
   const { user, loading: authLoading, isAdmin } = useContext(AuthContext);
   const navigate = useNavigate();
 
+  // Active Tab
   const [activeTab, setActiveTab] = useState('videos');
   const [stats, setStats] = useState({ videos: 0, reels: 0, comments: 0, totalViews: 0 });
+
+  // Videos Pagination States (Lazy Load)
   const [videos, setVideos] = useState([]);
+  const [videosCursor, setVideosCursor] = useState(null);
+  const [hasMoreVideos, setHasMoreVideos] = useState(false);
+  const [loadingVideos, setLoadingVideos] = useState(false);
+
+  // Reels Pagination States (Lazy Load)
   const [reels, setReels] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [reelsCursor, setReelsCursor] = useState(null);
+  const [hasMoreReels, setHasMoreReels] = useState(false);
+  const [loadingReels, setLoadingReels] = useState(false);
+
+  const [loadingStats, setLoadingStats] = useState(true);
   const [toast, setToast] = useState({ message: '', type: 'success' });
 
-  // 1. Enforce admin guard
+  // Enforce admin guard
   useEffect(() => {
     if (!authLoading && (!user || !isAdmin)) {
       navigate('/login');
     }
   }, [user, authLoading, isAdmin, navigate]);
 
-  // 2. Fetch stats, videos, and reels
+  // Load dashboard statistics and initial list feeds
   useEffect(() => {
     if (user && isAdmin) {
-      loadDashboardData();
+      loadStats();
+      loadVideosFeed();
+      loadReelsFeed();
     }
   }, [user, isAdmin]);
 
-  const loadDashboardData = async () => {
-    setLoading(true);
+  const loadStats = async () => {
+    setLoadingStats(true);
     try {
-      const statsRes = await api.get('/settings/stats');
-      setStats(statsRes.data);
-
-      const videosRes = await api.get('/videos?limit=100'); // Fetch larger list for administration
-      setVideos(videosRes.data.videos);
-
-      const reelsRes = await api.get('/reels?limit=100');
-      setReels(reelsRes.data.reels);
+      const response = await api.get('/settings/stats');
+      setStats(response.data);
     } catch (err) {
-      console.error('Failed to load admin dashboard data:', err);
-      setToast({ message: 'Error loading dashboard data.', type: 'danger' });
+      console.error('Failed to load stats:', err);
     } finally {
-      setLoading(false);
+      setLoadingStats(false);
+    }
+  };
+
+  const loadVideosFeed = async (cursor = null) => {
+    setLoadingVideos(true);
+    try {
+      let url = '/videos?limit=10';
+      if (cursor) {
+        url += `&cursor_time=${encodeURIComponent(cursor.cursor_time)}&cursor_id=${cursor.cursor_id}`;
+      }
+
+      const response = await api.get(url);
+      const { videos: newVideos, nextCursor, hasMore } = response.data;
+
+      if (cursor) {
+        setVideos(prev => [...prev, ...newVideos]);
+      } else {
+        setVideos(newVideos);
+      }
+
+      setVideosCursor(nextCursor);
+      setHasMoreVideos(hasMore);
+    } catch (err) {
+      console.error('Failed to load videos:', err);
+      setToast({ message: 'Error loading videos list.', type: 'danger' });
+    } finally {
+      setLoadingVideos(false);
+    }
+  };
+
+  const loadReelsFeed = async (cursor = null) => {
+    setLoadingReels(true);
+    try {
+      let url = '/reels?limit=10';
+      if (cursor) {
+        url += `&cursor_time=${encodeURIComponent(cursor.cursor_time)}&cursor_id=${cursor.cursor_id}`;
+      }
+
+      const response = await api.get(url);
+      const { reels: newReels, nextCursor, hasMore } = response.data;
+
+      if (cursor) {
+        setReels(prev => [...prev, ...newReels]);
+      } else {
+        setReels(newReels);
+      }
+
+      setReelsCursor(nextCursor);
+      setHasMoreReels(hasMore);
+    } catch (err) {
+      console.error('Failed to load reels:', err);
+      setToast({ message: 'Error loading reels list.', type: 'danger' });
+    } finally {
+      setLoadingReels(false);
     }
   };
 
@@ -54,6 +115,9 @@ export default function AdminDashboard() {
       await api.delete(`/videos/${id}`);
       setVideos(prev => prev.filter(v => v.id !== id));
       setToast({ message: 'Video deleted successfully.', type: 'success' });
+      
+      // Update stats count locally
+      setStats(prev => ({ ...prev, videos: Math.max(prev.videos - 1, 0) }));
     } catch (err) {
       setToast({ message: 'Delete video failed.', type: 'danger' });
     }
@@ -65,8 +129,27 @@ export default function AdminDashboard() {
       await api.delete(`/reels/${id}`);
       setReels(prev => prev.filter(r => r.id !== id));
       setToast({ message: 'Reel deleted successfully.', type: 'success' });
+      
+      // Update stats count locally
+      setStats(prev => ({ ...prev, reels: Math.max(prev.reels - 1, 0) }));
     } catch (err) {
       setToast({ message: 'Delete reel failed.', type: 'danger' });
+    }
+  };
+
+  const handleEditReel = async (id, currentTitle) => {
+    const newTitle = prompt('Enter new title for the reel:', currentTitle);
+    if (newTitle === null) return;
+    if (!newTitle.trim()) {
+      alert('Title cannot be empty.');
+      return;
+    }
+    try {
+      await api.put(`/reels/${id}`, { title: newTitle });
+      setReels(prev => prev.map(r => r.id === id ? { ...r, title: newTitle } : r));
+      setToast({ message: 'Reel updated successfully.', type: 'success' });
+    } catch (err) {
+      setToast({ message: 'Failed to update reel.', type: 'danger' });
     }
   };
 
@@ -76,155 +159,204 @@ export default function AdminDashboard() {
     return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
   };
 
-  if (authLoading || loading) {
-    return <div style={{ textAlign: 'center', padding: '50px', color: 'var(--text-muted)' }}>Loading Admin Panel...</div>;
+  if (authLoading) {
+    return <div style={{ textAlign: 'center', padding: '50px', color: 'var(--text-muted)' }}>Loading authentication...</div>;
   }
 
   return (
-    <div className="admin-container">
+    <div className="admin-container" style={{ padding: '16px 0' }}>
       {toast.message && <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: '', type: 'success' })} />}
       
-      <div className="admin-title-row">
-        <h1 style={{ fontSize: '24px', fontWeight: '700' }}>Admin Dashboard</h1>
-        <div style={{ display: 'flex', gap: '10px' }}>
-          <Link to="/admin/settings" className="btn btn-secondary">Settings & Ads</Link>
-          <Link to="/admin/upload" className="btn btn-primary">Upload Media</Link>
+      <div className="admin-title-row" style={{ padding: '0 16px 12px 16px' }}>
+        <h1 style={{ fontSize: '22px', fontWeight: '700' }}>Admin Dashboard</h1>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <Link to="/admin/settings" className="btn btn-secondary" style={{ padding: '6px 10px', fontSize: '13px' }}>Settings</Link>
+          <Link to="/admin/upload" className="btn btn-primary" style={{ padding: '6px 10px', fontSize: '13px' }}>Upload</Link>
         </div>
       </div>
 
-      {/* Stats Counter Grid */}
-      <div className="stats-grid">
+      {/* Stats Counter Row */}
+      <div className="stats-grid" style={{ padding: '0 16px', marginBottom: '20px' }}>
         <div className="stat-box">
-          <div className="stat-val">{stats.videos}</div>
+          <div className="stat-val">{loadingStats ? '...' : stats.videos}</div>
           <div className="stat-lbl">Videos</div>
         </div>
         <div className="stat-box">
-          <div className="stat-val">{stats.reels}</div>
+          <div className="stat-val">{loadingStats ? '...' : stats.reels}</div>
           <div className="stat-lbl">Reels</div>
         </div>
         <div className="stat-box">
-          <div className="stat-val">{stats.comments}</div>
+          <div className="stat-val">{loadingStats ? '...' : stats.comments}</div>
           <div className="stat-lbl">Comments</div>
         </div>
         <div className="stat-box">
-          <div className="stat-val">{stats.totalViews}</div>
+          <div className="stat-val">{loadingStats ? '...' : stats.totalViews}</div>
           <div className="stat-lbl">Views</div>
         </div>
       </div>
 
-      {/* Tabs list */}
-      <div className="tabs">
+      {/* Tabs Menu */}
+      <div className="tabs" style={{ padding: '0 16px' }}>
         <div className={`tab-btn ${activeTab === 'videos' ? 'active' : ''}`} onClick={() => setActiveTab('videos')}>
-          Videos ({videos.length})
+          Videos ({stats.videos})
         </div>
         <div className={`tab-btn ${activeTab === 'reels' ? 'active' : ''}`} onClick={() => setActiveTab('reels')}>
-          Reels ({reels.length})
+          Reels ({stats.reels})
         </div>
       </div>
 
-      {/* Tab Contents */}
+      {/* Responsive Full-Width Lists (Issue #5 & #6: No boxed tables, no horizontal scrolls, lazy-loaded) */}
       {activeTab === 'videos' ? (
-        <div className="table-responsive">
-          <table className="admin-table">
-            <thead>
-              <tr>
-                <th>Thumbnail</th>
-                <th>Title</th>
-                <th>Duration</th>
-                <th>Views</th>
-                <th>Status</th>
-                <th>Uploaded</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {videos.length === 0 ? (
-                <tr>
-                  <td colSpan="7" style={{ textAlign: 'center', color: 'var(--text-muted)' }}>No videos found.</td>
-                </tr>
-              ) : (
-                videos.map(video => (
-                  <tr key={video.id}>
-                    <td>
-                      <img 
-                        src={`${API_BASE_URL}/api/videos/${video.id}/thumbnail`} 
-                        alt="thumb" 
-                        width="80" 
-                        height="45" 
-                        style={{ objectFit: 'cover' }} 
-                      />
-                    </td>
-                    <td style={{ fontWeight: '600' }}>{video.title}</td>
-                    <td>{formatDuration(video.duration)}</td>
-                    <td>{video.views_count}</td>
-                    <td>
-                      <span style={{ 
-                        fontSize: '11px', 
-                        padding: '2px 6px', 
-                        borderRadius: '2px',
-                        backgroundColor: video.status === 'ready' ? 'rgba(76, 175, 80, 0.2)' : 'rgba(255, 152, 0, 0.2)',
-                        color: video.status === 'ready' ? 'var(--success)' : '#ff9800'
-                      }}>
-                        {video.status.toUpperCase()}
-                      </span>
-                    </td>
-                    <td>{new Date(video.created_at).toLocaleDateString()}</td>
-                    <td>
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        <Link to={`/admin/edit-video/${video.id}`} className="btn btn-secondary" style={{ padding: '4px 8px', fontSize: '12px' }}>Edit</Link>
-                        <button className="btn btn-danger" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => handleDeleteVideo(video.id)}>Delete</button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          {videos.length === 0 && !loadingVideos ? (
+            <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>No videos found.</div>
+          ) : (
+            videos.map(video => (
+              <div 
+                key={video.id}
+                style={{
+                  display: 'flex',
+                  gap: '12px',
+                  padding: '12px 16px',
+                  borderBottom: '1px solid var(--border-color)',
+                  alignItems: 'center',
+                  backgroundColor: 'var(--card-bg)'
+                }}
+              >
+                {/* Thumbnail */}
+                <div style={{ width: '90px', aspectRatio: '16/9', backgroundColor: '#000', position: 'relative', flexShrink: 0, borderRadius: '1px', overflow: 'hidden' }}>
+                  <img 
+                    src={`${API_BASE_URL}/api/videos/${video.id}/thumbnail`} 
+                    alt="thumb" 
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                    loading="lazy"
+                  />
+                  <span style={{
+                    position: 'absolute',
+                    bottom: '4px',
+                    right: '4px',
+                    backgroundColor: 'rgba(0,0,0,0.8)',
+                    fontSize: '9px',
+                    padding: '1px 3px',
+                    borderRadius: '1px'
+                  }}>
+                    {formatDuration(video.duration)}
+                  </span>
+                </div>
+
+                {/* Info and Actions column */}
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 }}>
+                  <span style={{ fontWeight: '600', color: '#fff', fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {video.title}
+                  </span>
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                    👁️ {video.views_count} views • {video.status.toUpperCase()}
+                  </span>
+                  
+                  {/* Actions (Edit, Delete, Play) */}
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '4px', flexWrap: 'wrap' }}>
+                    <Link to={`/admin/edit-video/${video.id}`} className="btn btn-secondary" style={{ padding: '3px 8px', fontSize: '11px' }}>
+                      Edit
+                    </Link>
+                    <button 
+                      className="btn btn-danger" 
+                      style={{ padding: '3px 8px', fontSize: '11px' }} 
+                      onClick={() => handleDeleteVideo(video.id)}
+                    >
+                      Delete
+                    </button>
+                    <Link to={`/watch/${video.id}`} className="btn btn-secondary" style={{ padding: '3px 8px', fontSize: '11px' }}>
+                      Play
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+
+          {/* Lazy load pagination trigger */}
+          {hasMoreVideos && (
+            <div className="load-more-container" style={{ padding: '20px 16px' }}>
+              <button 
+                className="btn btn-secondary" 
+                style={{ width: '100%', height: '38px', justifyContent: 'center' }}
+                onClick={() => loadVideosFeed(videosCursor)}
+                disabled={loadingVideos}
+              >
+                {loadingVideos ? 'Loading next...' : 'Load More Videos'}
+              </button>
+            </div>
+          )}
         </div>
       ) : (
-        <div className="table-responsive">
-          <table className="admin-table">
-            <thead>
-              <tr>
-                <th>Title</th>
-                <th>Duration</th>
-                <th>Views</th>
-                <th>Status</th>
-                <th>Uploaded</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {reels.length === 0 ? (
-                <tr>
-                  <td colSpan="6" style={{ textAlign: 'center', color: 'var(--text-muted)' }}>No reels found.</td>
-                </tr>
-              ) : (
-                reels.map(reel => (
-                  <tr key={reel.id}>
-                    <td style={{ fontWeight: '600' }}>{reel.title || `Reel #${reel.id}`}</td>
-                    <td>{formatDuration(reel.duration)}</td>
-                    <td>{reel.views_count}</td>
-                    <td>
-                      <span style={{ 
-                        fontSize: '11px', 
-                        padding: '2px 6px', 
-                        borderRadius: '2px',
-                        backgroundColor: reel.status === 'ready' ? 'rgba(76, 175, 80, 0.2)' : 'rgba(255, 152, 0, 0.2)',
-                        color: reel.status === 'ready' ? 'var(--success)' : '#ff9800'
-                      }}>
-                        {reel.status.toUpperCase()}
-                      </span>
-                    </td>
-                    <td>{new Date(reel.created_at).toLocaleDateString()}</td>
-                    <td>
-                      <button className="btn btn-danger" style={{ padding: '4px 8px', fontSize: '12px' }} onClick={() => handleDeleteReel(reel.id)}>Delete</button>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          {reels.length === 0 && !loadingReels ? (
+            <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>No reels found.</div>
+          ) : (
+            reels.map(reel => (
+              <div 
+                key={reel.id}
+                style={{
+                  display: 'flex',
+                  gap: '12px',
+                  padding: '12px 16px',
+                  borderBottom: '1px solid var(--border-color)',
+                  alignItems: 'center',
+                  backgroundColor: 'var(--card-bg)'
+                }}
+              >
+                {/* Visual Placeholder */}
+                <div style={{ width: '50px', height: '80px', backgroundColor: '#000', display: 'flex', justifyContent: 'center', alignItems: 'center', flexShrink: 0, border: '1px solid var(--border-color)', borderRadius: '1px' }}>
+                  <span style={{ fontSize: '16px' }}>🎥</span>
+                </div>
+
+                {/* Info & Actions */}
+                <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '4px', minWidth: 0 }}>
+                  <span style={{ fontWeight: '600', color: '#fff', fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {reel.title || `Reel #${reel.id}`}
+                  </span>
+                  <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
+                    👁️ {reel.views_count} views • {reel.status.toUpperCase()} ({formatDuration(reel.duration)})
+                  </span>
+
+                  {/* Actions (Edit, Delete, Play) */}
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '4px', flexWrap: 'wrap' }}>
+                    <button 
+                      className="btn btn-secondary" 
+                      style={{ padding: '3px 8px', fontSize: '11px' }} 
+                      onClick={() => handleEditReel(reel.id, reel.title || '')}
+                    >
+                      Edit
+                    </button>
+                    <button 
+                      className="btn btn-danger" 
+                      style={{ padding: '3px 8px', fontSize: '11px' }} 
+                      onClick={() => handleDeleteReel(reel.id)}
+                    >
+                      Delete
+                    </button>
+                    <Link to="/reels" className="btn btn-secondary" style={{ padding: '3px 8px', fontSize: '11px' }}>
+                      Play
+                    </Link>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+
+          {/* Lazy load pagination trigger */}
+          {hasMoreReels && (
+            <div className="load-more-container" style={{ padding: '20px 16px' }}>
+              <button 
+                className="btn btn-secondary" 
+                style={{ width: '100%', height: '38px', justifyContent: 'center' }}
+                onClick={() => loadReelsFeed(reelsCursor)}
+                disabled={loadingReels}
+              >
+                {loadingReels ? 'Loading next...' : 'Load More Reels'}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

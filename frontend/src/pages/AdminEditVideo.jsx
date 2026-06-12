@@ -15,6 +15,7 @@ export default function AdminEditVideo() {
   const [tempThumbs, setTempThumbs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingThumbs, setLoadingThumbs] = useState(true);
+  const [thumbError, setThumbError] = useState('');
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState({ message: '', type: 'success' });
 
@@ -56,12 +57,16 @@ export default function AdminEditVideo() {
 
   const loadTemporaryThumbnails = async () => {
     setLoadingThumbs(true);
+    setThumbError('');
     try {
       const response = await api.get(`/videos/${id}/temp-thumbnails`);
       setTempThumbs(response.data.thumbnails || []);
     } catch (err) {
       console.error('Failed to generate temp thumbnails:', err);
-      setToast({ message: 'Failed to extract video thumbnail choices.', type: 'danger' });
+      const errorText = err.response?.data?.error || 'Failed to extract video thumbnail choices.';
+      const detailText = err.response?.data?.detail ? `: ${err.response.data.detail}` : '';
+      setThumbError(`${errorText}${detailText}`);
+      setToast({ message: `${errorText}${detailText}`, type: 'danger' });
     } finally {
       setLoadingThumbs(false);
     }
@@ -149,6 +154,10 @@ export default function AdminEditVideo() {
             {loadingThumbs ? (
               <div style={{ padding: '20px 0', color: 'var(--text-muted)', fontSize: '12px' }}>
                 ⏳ Extracting 10 frames from video file using FFmpeg... Please wait.
+              </div>
+            ) : thumbError ? (
+              <div style={{ color: 'var(--danger)', fontSize: '13px', padding: '12px', border: '1px solid rgba(244,67,54,0.3)', backgroundColor: 'rgba(244, 67, 54, 0.05)', borderRadius: '2px' }}>
+                <strong>Failed to generate preview frames.</strong> Reason: {thumbError}
               </div>
             ) : tempThumbs.length === 0 ? (
               <div style={{ color: 'var(--danger)', fontSize: '12px' }}>

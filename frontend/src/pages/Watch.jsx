@@ -1,28 +1,56 @@
 import React, { useState, useEffect, useRef, useContext } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import api, { API_BASE_URL } from '../utils/api';
 import { AuthContext } from '../context/AuthContext';
 import AdPlacement from '../components/AdPlacement';
 import Toast from '../components/Toast';
+import Hls from 'hls.js';
 
 export default function Watch() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { user } = useContext(AuthContext);
 
+  // States
   const [video, setVideo] = useState(null);
+  const [relatedVideos, setRelatedVideos] = useState([]);
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState('');
-  const [replyText, setReplyText] = useState({}); // Keyed by comment ID
+  const [replyText, setReplyText] = useState({});
   const [activeReplyId, setActiveReplyId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [liked, setLiked] = useState(false);
   const [toast, setToast] = useState({ message: '', type: 'success' });
+  const [showComments, setShowComments] = useState(false);
 
+  // Custom Video Player States
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [isMuted, setIsMuted] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [showControls, setShowControls] = useState(true);
+  const [seekIndicator, setSeekIndicator] = useState(null); // 'rewind' or 'forward'
+
+  // Refs
   const videoRef = useRef(null);
   const hlsRef = useRef(null);
+  const viewLogged = useRef(false);
+  const lastTapRef = useRef({ time: 0, x: 0 });
+  const controlsTimeoutRef = useRef(null);
+  const playerWrapperRef = useRef(null);
 
-  // 1. Fetch Video details and Comments
+  // Reset states on video id changes
+  useEffect(() => {
+    viewLogged.current = false;
+    setShowComments(false);
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setProgress(0);
+    setShowControls(true);
+  }, [id]);
+
+  // Load video details, related videos, and comments
   useEffect(() => {
     const fetchWatchData = async () => {
       setLoading(true);
@@ -30,13 +58,13 @@ export default function Watch() {
         const videoRes = await api.get(`/videos/${id}`);
         setVideo(videoRes.data);
 
-        // Check if user has liked this video
-        if (user) {
-          // Verify liked state (we can infer it if user's ID is in lists, or check endpoint, or toggle handles it)
-          // To keep it simple, backend likeVideo endpoint toggles and returns { liked: true/false }.
-          // Let's assume a check or let toggle handle it.
-        }
+        // Fetch related videos (limit to 10 and exclude current)
+        const relatedRes = await api.get('/videos?limit=10');
+        setRelatedVideos(
+          (relatedRes.data.videos || []).filter(v => v.id !== parseInt(id))
+        );
 
+        // Fetch comments
         const commentsRes = await api.get(`/comments?video_id=${id}`);
         setComments(commentsRes.data);
       } catch (err) {
@@ -50,52 +78,53 @@ export default function Watch() {
     fetchWatchData();
   }, [id, user]);
 
-  // 2. Setup HLS Video Player (Dynamic imports for high PageSpeed)
+  // HLS / MP4 Media Binding Lifecycle (incorporating `loading` dependency to resolve blank screen bug)
   useEffect(() => {
-    if (!video || !videoRef.current) return;
+    if (loading || !video || !videoRef.current) return;
 
     const videoElement = videoRef.current;
-    
-    // Determine path to load
     let videoUrl = '';
+    
     if (video.status === 'ready') {
       videoUrl = `${API_BASE_URL}${video.file_path}`;
     } else {
-      // If still processing, play the temporary raw MP4 uploaded path
       videoUrl = `${API_BASE_URL}/${video.file_path.replace(/\\/g, '/')}`;
     }
 
-    // Reset current sources
-    videoElement.src = '';
-    
+    // Clean up previous HLS instance if any
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
+    }
+
     if (video.status === 'ready') {
-      // Browser supports native HLS (e.g. Safari / iOS)
       if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
         videoElement.src = videoUrl;
+        videoElement.play().catch(err => console.warn('Autoplay blocked:', err.message));
       } else {
-        // Dynamically load HLS.js to optimize bundle size (Core Web Vital PageSpeed optimization)
-        import('hls.js').then(({ default: Hls }) => {
-          if (Hls.isSupported()) {
-            if (hlsRef.current) {
-              hlsRef.current.destroy();
-            }
-            const hlsInstance = new Hls({
-              enableWorker: true,
-              lowLatencyMode: true
-            });
-            hlsRef.current = hlsInstance;
-            hlsInstance.loadSource(videoUrl);
-            hlsInstance.attachMedia(videoElement);
-          } else {
-            // Fallback for browsers that don't support HLS
-            videoElement.src = videoUrl;
-          }
-        });
+        if (Hls.isSupported()) {
+          const hlsInstance = new Hls({
+            enableWorker: true,
+            lowLatencyMode: true
+          });
+          hlsRef.current = hlsInstance;
+          hlsInstance.loadSource(videoUrl);
+          hlsInstance.attachMedia(videoElement);
+          hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
+            videoElement.play().catch(err => console.warn('Autoplay blocked:', err.message));
+          });
+        } else {
+          videoElement.src = videoUrl;
+          videoElement.play().catch(err => console.warn('Autoplay blocked:', err.message));
+        }
       }
     } else {
-      // Fallback for non-ready MP4 files directly
       videoElement.src = videoUrl;
+      videoElement.play().catch(err => console.warn('Autoplay blocked:', err.message));
     }
+
+    // Force load the video element
+    videoElement.load();
 
     return () => {
       if (hlsRef.current) {
@@ -103,9 +132,173 @@ export default function Watch() {
         hlsRef.current = null;
       }
     };
-  }, [video]);
+  }, [video?.id, loading]);
 
-  // Handle Video Like
+  // Auto-hide controls overlay helper
+  const handleMouseMove = () => {
+    setShowControls(true);
+    if (controlsTimeoutRef.current) {
+      clearTimeout(controlsTimeoutRef.current);
+    }
+    controlsTimeoutRef.current = setTimeout(() => {
+      if (isPlaying) {
+        setShowControls(false);
+      }
+    }, 2500);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
+    };
+  }, [isPlaying]);
+
+  // Playback Control Handlers
+  const handlePlayPause = () => {
+    if (videoRef.current) {
+      if (videoRef.current.paused) {
+        videoRef.current.play().catch(err => console.warn('Playback block:', err.message));
+        setIsPlaying(true);
+      } else {
+        videoRef.current.pause();
+        setIsPlaying(false);
+      }
+    }
+  };
+
+  const seekForward = () => {
+    if (videoRef.current) {
+      videoRef.current.currentTime = Math.min(videoRef.current.currentTime + 10, videoRef.current.duration || 0);
+    }
+  };
+
+  const seekBackward = () => {
+    if (videoRef.current) {
+      videoRef.current.currentTime = Math.max(videoRef.current.currentTime - 10, 0);
+    }
+  };
+
+  const showOverlayIndicator = (type) => {
+    setSeekIndicator(type);
+    setTimeout(() => {
+      setSeekIndicator(null);
+    }, 600);
+  };
+
+  // Scrubber time update syncs
+  const handleTimeUpdate = () => {
+    if (videoRef.current) {
+      setCurrentTime(videoRef.current.currentTime);
+      setProgress((videoRef.current.currentTime / (videoRef.current.duration || 1)) * 100);
+    }
+  };
+
+  const handleDurationChange = () => {
+    if (videoRef.current) {
+      setDuration(videoRef.current.duration || 0);
+    }
+  };
+
+  const handleScrub = (e) => {
+    const newTime = (parseFloat(e.target.value) / 100) * duration;
+    if (videoRef.current) {
+      videoRef.current.currentTime = newTime;
+      setCurrentTime(newTime);
+    }
+  };
+
+  const handleFullscreen = () => {
+    if (!playerWrapperRef.current) return;
+    const container = playerWrapperRef.current;
+    if (document.fullscreenElement) {
+      document.exitFullscreen();
+    } else {
+      container.requestFullscreen().catch(err => console.error('Fullscreen request failed:', err));
+    }
+  };
+
+  // Keyboard Shortcuts Seek Listener
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (
+        document.activeElement.tagName === 'INPUT' || 
+        document.activeElement.tagName === 'TEXTAREA' ||
+        document.activeElement.isContentEditable
+      ) {
+        return;
+      }
+
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        seekBackward();
+        showOverlayIndicator('rewind');
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        seekForward();
+        showOverlayIndicator('forward');
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [duration]);
+
+  // Click handler on player view (Double-Tap detector)
+  const handleVideoClick = (e) => {
+    const now = Date.now();
+    const DOUBLE_TAP_DELAY = 300;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    const width = rect.width;
+    const height = rect.height;
+
+    // Skip trigger if clicking controls overlay area
+    if (clickY > height * 0.8) return;
+
+    if (now - lastTapRef.current.time < DOUBLE_TAP_DELAY) {
+      if (clickX < width / 2) {
+        seekBackward();
+        showOverlayIndicator('rewind');
+      } else {
+        seekForward();
+        showOverlayIndicator('forward');
+      }
+    } else {
+      // Single tap toggles play
+      handlePlayPause();
+    }
+    lastTapRef.current = { time: now, x: clickX };
+  };
+
+  // Register views stats trigger on initial play
+  const handlePlay = async () => {
+    setIsPlaying(true);
+    if (!viewLogged.current) {
+      viewLogged.current = true;
+      try {
+        const response = await api.post(`/videos/${id}/view`);
+        if (response.data.status === 'counted') {
+          setVideo(prev => ({
+            ...prev,
+            views_count: response.data.views_count
+          }));
+        }
+      } catch (err) {
+        console.error('Failed to log video view:', err);
+      }
+    }
+  };
+
+  // Format Helper MM:SS
+  const formatTime = (secs) => {
+    if (isNaN(secs)) return '00:00';
+    const mins = Math.floor(secs / 60);
+    const seconds = Math.floor(secs % 60);
+    return `${mins.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  };
+
+  // Like video handler
   const handleLike = async () => {
     if (!user) {
       setToast({ message: 'Please sign in to like videos.', type: 'danger' });
@@ -125,13 +318,13 @@ export default function Watch() {
     }
   };
 
-  // Copy Watch URL to Clipboard
+  // Share handler
   const handleShare = () => {
     navigator.clipboard.writeText(window.location.href);
     setToast({ message: 'Link copied to clipboard!', type: 'success' });
   };
 
-  // Add root-level comment
+  // Comment additions
   const handleAddComment = async (e) => {
     e.preventDefault();
     if (!user) {
@@ -153,7 +346,6 @@ export default function Watch() {
     }
   };
 
-  // Add reply to comment
   const handleAddReply = async (commentId) => {
     const text = replyText[commentId];
     if (!user) {
@@ -169,13 +361,11 @@ export default function Watch() {
         content: text
       });
 
-      // Insert reply into local comment tree state
       setComments(prev => {
         return prev.map(c => {
           if (c.id === commentId) {
             return { ...c, replies: [...c.replies, response.data] };
           }
-          // Also look into replies for deeper nesting if supported
           return c;
         });
       });
@@ -188,12 +378,9 @@ export default function Watch() {
     }
   };
 
-  // Delete comment
   const handleDeleteComment = async (commentId, parentId = null) => {
     try {
       await api.delete(`/comments/${commentId}`);
-      
-      // Update state local tree
       setComments(prev => {
         if (parentId) {
           return prev.map(c => {
@@ -206,7 +393,6 @@ export default function Watch() {
           return prev.filter(c => c.id !== commentId);
         }
       });
-      
       setToast({ message: 'Comment deleted.', type: 'success' });
     } catch (err) {
       setToast({ message: 'Failed to delete comment.', type: 'danger' });
@@ -243,7 +429,6 @@ export default function Watch() {
           )}
         </div>
 
-        {/* Reply Input Box */}
         {activeReplyId === comment.id && (
           <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
             <input
@@ -260,7 +445,6 @@ export default function Watch() {
           </div>
         )}
 
-        {/* Render child replies recursively */}
         {comment.replies && comment.replies.length > 0 && (
           <div className="comment-replies">
             {renderCommentList(comment.replies, comment.id)}
@@ -287,15 +471,154 @@ export default function Watch() {
         {/* Video Top Ad placement */}
         <AdPlacement placement="video_top" />
 
-        {/* HLS / Native Video Player */}
-        <div className="player-wrapper">
+        {/* Custom HLS / Native Video Player Container */}
+        <div 
+          ref={playerWrapperRef}
+          className="player-wrapper" 
+          style={{ position: 'relative', overflow: 'hidden' }}
+          onMouseMove={handleMouseMove}
+          onMouseLeave={() => isPlaying && setShowControls(false)}
+        >
           <video
             ref={videoRef}
             className="player-element"
-            controls
-            autoPlay
             playsInline
+            onPlay={handlePlay}
+            onPause={() => setIsPlaying(false)}
+            onTimeUpdate={handleTimeUpdate}
+            onDurationChange={handleDurationChange}
+            onClick={handleVideoClick}
+            style={{ cursor: 'pointer' }}
           />
+
+          {/* Double Tap Visual Indicator overlays */}
+          {seekIndicator && (
+            <div style={{
+              position: 'absolute',
+              top: 0,
+              left: seekIndicator === 'rewind' ? 0 : '50%',
+              width: '50%',
+              height: '100%',
+              backgroundColor: 'rgba(255, 255, 255, 0.08)',
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              fontSize: '22px',
+              fontWeight: 'bold',
+              color: '#fff',
+              pointerEvents: 'none',
+              zIndex: 10,
+              borderRadius: '2px'
+            }}>
+              {seekIndicator === 'rewind' ? '⏪ -10s' : '+10s ⏩'}
+            </div>
+          )}
+
+          {/* Integrated custom control bar (Issue #2: Controls inside player controls bar) */}
+          <div 
+            className="custom-player-controls"
+            style={{
+              position: 'absolute',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              backgroundColor: 'rgba(15, 15, 15, 0.95)',
+              display: 'flex',
+              flexDirection: 'column',
+              padding: '6px 12px',
+              gap: '4px',
+              zIndex: 20,
+              transition: 'opacity 0.25s ease-in-out',
+              opacity: showControls ? 1 : 0,
+              pointerEvents: showControls ? 'auto' : 'none'
+            }}
+            onClick={(e) => e.stopPropagation()} // Stop propagation from triggering Play toggle on tap
+          >
+            {/* Scrubber track */}
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="0.1"
+              value={progress}
+              onChange={handleScrub}
+              style={{
+                width: '100%',
+                accentColor: 'var(--primary)',
+                cursor: 'pointer',
+                height: '3px',
+                backgroundColor: '#333',
+                border: 'none',
+                outline: 'none'
+              }}
+            />
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              {/* Media Controls Group Left */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                
+                {/* Integrated Backward skip button */}
+                <button 
+                  type="button" 
+                  onClick={seekBackward} 
+                  style={{ cursor: 'pointer', fontSize: '15px', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  title="Rewind 10 seconds"
+                >
+                  ⏪
+                </button>
+
+                {/* Play/Pause Button */}
+                <button 
+                  type="button" 
+                  onClick={handlePlayPause} 
+                  style={{ cursor: 'pointer', fontSize: '15px', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                >
+                  {isPlaying ? '⏸️' : '▶️'}
+                </button>
+
+                {/* Integrated Forward skip button */}
+                <button 
+                  type="button" 
+                  onClick={seekForward} 
+                  style={{ cursor: 'pointer', fontSize: '15px', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                  title="Forward 10 seconds"
+                >
+                  ⏩
+                </button>
+
+                {/* Timer details */}
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)', userSelect: 'none' }}>
+                  {formatTime(currentTime)} / {formatTime(duration)}
+                </span>
+              </div>
+
+              {/* Media Controls Group Right */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+                {/* Mute button */}
+                <button 
+                  type="button" 
+                  onClick={() => {
+                    if (videoRef.current) {
+                      videoRef.current.muted = !videoRef.current.muted;
+                      setIsMuted(videoRef.current.muted);
+                    }
+                  }} 
+                  style={{ cursor: 'pointer', fontSize: '14px', color: '#fff' }}
+                >
+                  {isMuted ? '🔇' : '🔊'}
+                </button>
+                {/* Fullscreen button */}
+                <button 
+                  type="button" 
+                  onClick={handleFullscreen} 
+                  style={{ cursor: 'pointer', fontSize: '14px', color: '#fff' }}
+                  title="Fullscreen toggle"
+                >
+                  🔲
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Video Details */}
@@ -336,7 +659,6 @@ export default function Watch() {
           </div>
         </div>
 
-        {/* Video description */}
         {video.description && (
           <div className="video-description-box">
             {video.description}
@@ -346,41 +668,112 @@ export default function Watch() {
         {/* Video Bottom Ad Placement */}
         <AdPlacement placement="video_bottom" />
 
-        {/* Comments Section */}
-        <div className="comments-container">
-          <h3 className="comments-header">Comments ({comments.length})</h3>
+        {/* RELATED VIDEOS FEED SECTION (Issue #4: Below Player and Details, above comments) */}
+        <div className="related-videos-section" style={{ padding: '16px', borderBottom: '1px solid var(--border-color)' }}>
+          <h3 style={{ fontSize: '14px', fontWeight: '700', marginBottom: '12px', color: '#fff', letterSpacing: '0.5px' }}>
+            Related Videos
+          </h3>
+          {relatedVideos.length === 0 ? (
+            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>No related videos found.</span>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {relatedVideos.map(rv => (
+                <Link 
+                  key={rv.id} 
+                  to={`/watch/${rv.id}`} 
+                  style={{ display: 'flex', gap: '12px', alignItems: 'center' }}
+                >
+                  <div style={{ width: '110px', aspectRatio: '16/9', backgroundColor: '#000', borderRadius: '1px', overflow: 'hidden', flexShrink: 0 }}>
+                    <img 
+                      src={`${API_BASE_URL}/api/videos/${rv.id}/thumbnail`} 
+                      alt={rv.title} 
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
+                      loading="lazy"
+                    />
+                  </div>
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                    <span style={{ 
+                      fontSize: '13px', 
+                      fontWeight: '600', 
+                      color: '#fff', 
+                      display: '-webkit-box', 
+                      WebkitLineClamp: 2, 
+                      WebkitBoxOrient: 'vertical', 
+                      overflow: 'hidden',
+                      lineHeight: '1.2' 
+                    }}>
+                      {rv.title}
+                    </span>
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px' }}>
+                      {rv.views_count} views
+                    </span>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
 
-          <form onSubmit={handleAddComment} className="comment-input-box">
-            <textarea
-              className="comment-textarea"
-              placeholder={user ? "Add a public comment..." : "Sign in to add a comment..."}
-              value={newComment}
-              onChange={(e) => setNewComment(e.target.value)}
-              disabled={!user}
-              rows="2"
-              required
-            />
-            <button 
-              type="submit" 
-              className={`btn btn-primary ${!user ? 'btn-disabled' : ''}`}
-              style={{ alignSelf: 'flex-end', height: '40px' }}
-              disabled={!user}
-            >
-              Comment
-            </button>
-          </form>
+        {/* COMMENTS SECTION - Collapsible and hidden by default (Issue #4) */}
+        <div style={{ borderBottom: '1px solid var(--border-color)' }}>
+          {!showComments ? (
+            <div style={{ padding: '16px', textAlign: 'center' }}>
+              <button 
+                type="button"
+                className="btn btn-secondary" 
+                style={{ width: '100%', height: '40px', justifyContent: 'center' }} 
+                onClick={() => setShowComments(true)}
+              >
+                View Comments ({comments.length})
+              </button>
+            </div>
+          ) : (
+            <div className="comments-container">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h3 className="comments-header" style={{ margin: 0 }}>Comments ({comments.length})</h3>
+                <button 
+                  type="button" 
+                  className="btn btn-secondary" 
+                  style={{ padding: '4px 8px', fontSize: '11px' }}
+                  onClick={() => setShowComments(false)}
+                >
+                  Hide Comments
+                </button>
+              </div>
 
-          <div className="comment-list">
-            {comments.length === 0 ? (
-              <div style={{ color: 'var(--text-muted)', fontSize: '13px' }}>No comments yet. Be the first to reply!</div>
-            ) : (
-              renderCommentList(comments)
-            )}
-          </div>
+              <form onSubmit={handleAddComment} className="comment-input-box">
+                <textarea
+                  className="comment-textarea"
+                  placeholder={user ? "Add a public comment..." : "Sign in to add a comment..."}
+                  value={newComment}
+                  onChange={(e) => setNewComment(e.target.value)}
+                  disabled={!user}
+                  rows="2"
+                  required
+                />
+                <button 
+                  type="submit" 
+                  className={`btn btn-primary ${!user ? 'btn-disabled' : ''}`}
+                  style={{ alignSelf: 'flex-end', height: '40px' }}
+                  disabled={!user}
+                >
+                  Comment
+                </button>
+              </form>
+
+              <div className="comment-list">
+                {comments.length === 0 ? (
+                  <div style={{ color: 'var(--text-muted)', fontSize: '13px' }}>No comments yet. Be the first to reply!</div>
+                ) : (
+                  renderCommentList(comments)
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Sidebar Ad Placement */}
+      {/* Sidebar Column */}
       <div className="watch-sidebar">
         <AdPlacement placement="sidebar" />
         <AdPlacement placement="watch_page" />

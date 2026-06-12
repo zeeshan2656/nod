@@ -166,16 +166,13 @@ exports.listVideos = async (req, res) => {
 };
 
 /**
- * Get single video details (increments views count)
+ * Get single video details
  */
 exports.getVideo = async (req, res) => {
   const id = parseInt(req.params.id);
   if (isNaN(id)) return res.status(400).json({ error: 'Invalid video ID.' });
 
   try {
-    // Increment view count directly (unbuffered update for accuracy, but fast execution)
-    await db.query('UPDATE videos SET views_count = views_count + 1 WHERE id = ?', [id]);
-
     const [rows] = await db.query('SELECT * FROM videos WHERE id = ?', [id]);
     const video = rows[0];
 
@@ -218,11 +215,11 @@ exports.streamThumbnail = async (req, res) => {
     }
 
     // Determine target file path
-    let sourcePath = video.file_path;
-    // If relative path, make it absolute
-    if (!path.isAbsolute(sourcePath)) {
-      sourcePath = path.join(__dirname, '..', sourcePath);
+    let relativePath = video.file_path;
+    if (relativePath.startsWith('/')) {
+      relativePath = relativePath.substring(1);
     }
+    const sourcePath = path.resolve(__dirname, '..', relativePath);
 
     // Verify file exists
     if (!fs.existsSync(sourcePath) && video.status !== 'ready') {
@@ -251,23 +248,67 @@ exports.streamThumbnail = async (req, res) => {
 };
 
 /**
- * Generate 10 temporary thumbnails for selection in upload/edit pages
+ * Generate 10 temporary thumbnails for selection in upload/edit pages (with detailed diagnostics)
  */
 exports.getTemporaryThumbnails = async (req, res) => {
   const id = parseInt(req.params.id);
-  if (isNaN(id)) return res.status(400).json({ error: 'Invalid video ID.' });
+  if (isNaN(id)) {
+    return res.status(400).json({ error: 'Invalid path', detail: 'The provided video ID is not a number.' });
+  }
 
   try {
     const [rows] = await db.query('SELECT file_path, duration FROM videos WHERE id = ?', [id]);
     const video = rows[0];
 
     if (!video) {
-      return res.status(404).json({ error: 'Video not found.' });
+      console.error(`[Edit Diagnostics] Video ID ${id} not found in database.`);
+      return res.status(404).json({ error: 'Invalid path', detail: `Video record with ID ${id} not found in database.` });
     }
 
-    let sourcePath = video.file_path;
-    if (!path.isAbsolute(sourcePath)) {
-      sourcePath = path.join(__dirname, '..', sourcePath);
+    // 1. Verify path exists in DB
+    if (!video.file_path) {
+      console.error(`[Edit Diagnostics] Video ID ${id} has empty file_path in DB.`);
+      return res.status(400).json({ error: 'Invalid path', detail: 'The video path is empty in the database.' });
+    }
+
+    // Resolve path relative to backend root
+    let relativePath = video.file_path;
+    if (relativePath.startsWith('/')) {
+      relativePath = relativePath.substring(1);
+    }
+    const sourcePath = path.resolve(__dirname, '..', relativePath);
+
+    // 2. Verify file is physically present on disk
+    if (!fs.existsSync(sourcePath)) {
+      console.error(`[Edit Diagnostics] File physically missing at path: ${sourcePath}`);
+      return res.status(404).json({ error: 'Video file missing', detail: `Video file is physically missing at path: ${sourcePath}` });
+    }
+
+    // 3. Verify read permissions
+    try {
+      fs.accessSync(sourcePath, fs.constants.R_OK);
+    } catch (permErr) {
+      console.error(`[Edit Diagnostics] Read permission denied for path: ${sourcePath}`);
+      return res.status(403).json({ error: 'Permission denied', detail: `No read permissions on file: ${sourcePath}. system error: ${permErr.message}` });
+    }
+
+    // 4 & 5. Verify FFmpeg access and video metadata extraction (corrupted file check)
+    const { execSync } = require('child_process');
+    try {
+      const probeCmd = `ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of json "${sourcePath}"`;
+      const probeOut = execSync(probeCmd).toString();
+      const probeData = JSON.parse(probeOut);
+      if (!probeData.streams || probeData.streams.length === 0) {
+        throw new Error('No valid video stream detected in media file container.');
+      }
+    } catch (probeErr) {
+      console.error(`[Edit Diagnostics] Probe failed for ${sourcePath}. Error: ${probeErr.message}`);
+      const isExecMissing = probeErr.message.includes('not recognized') || probeErr.message.includes('cannot find') || probeErr.message.includes('ENOENT');
+      if (isExecMissing) {
+        return res.status(500).json({ error: 'FFmpeg error', detail: 'The ffprobe/ffmpeg binaries could not be executed in the environment.' });
+      } else {
+        return res.status(400).json({ error: 'Corrupted video', detail: `The video file is corrupted or unreadable: ${probeErr.message}` });
+      }
     }
 
     // Create unique temp folder for this video's thumbnails
@@ -277,6 +318,7 @@ exports.getTemporaryThumbnails = async (req, res) => {
     }
 
     const thumbUrls = [];
+    const { spawnSync } = require('child_process');
 
     // Extract 10 frames sequentially
     for (let i = 1; i <= 10; i++) {
@@ -288,14 +330,21 @@ exports.getTemporaryThumbnails = async (req, res) => {
         '-ss', timestamp.toFixed(3),
         '-i', sourcePath,
         '-vframes', '1',
-        '-vf', 'scale=320:-1', // Lower resolution for quick admin previews
+        '-vf', 'scale=320:-1',
         '-f', 'image2',
         '-y', outFilePath
       ];
 
-      // Spawn FFmpeg to extract frame on disk (briefly)
-      const { spawnSync } = require('child_process');
-      spawnSync('ffmpeg', ffmpegArgs);
+      // Spawn FFmpeg to extract frame on disk
+      const ffProcess = spawnSync('ffmpeg', ffmpegArgs);
+      
+      if (ffProcess.status !== 0) {
+        console.error(`[Edit Diagnostics] FFmpeg extraction failed for frame ${i}:`, ffProcess.stderr.toString());
+        return res.status(500).json({ 
+          error: 'FFmpeg error', 
+          detail: `FFmpeg failed to extract frame ${i} at timestamp ${timestamp}. Stderr: ${ffProcess.stderr.toString()}` 
+        });
+      }
 
       // Verify file was written
       if (fs.existsSync(outFilePath)) {
@@ -313,7 +362,7 @@ exports.getTemporaryThumbnails = async (req, res) => {
 
   } catch (err) {
     console.error('Temporary thumbnail generation failed:', err);
-    res.status(500).json({ error: 'Failed to generate temporary preview thumbnails.' });
+    res.status(500).json({ error: 'FFmpeg error', detail: err.message });
   }
 };
 
@@ -384,7 +433,11 @@ exports.deleteVideo = async (req, res) => {
     // 2. Remove files on disk
     // If still processing, clean up original upload path
     if (video.status === 'processing') {
-      const origPath = path.isAbsolute(video.file_path) ? video.file_path : path.join(__dirname, '..', video.file_path);
+      let relPath = video.file_path;
+      if (relPath.startsWith('/')) {
+        relPath = relPath.substring(1);
+      }
+      const origPath = path.resolve(__dirname, '..', relPath);
       if (fs.existsSync(origPath)) fs.unlinkSync(origPath);
     }
     
@@ -452,5 +505,43 @@ exports.likeVideo = async (req, res) => {
   } catch (err) {
     console.error('Like video error:', err);
     res.status(500).json({ error: 'Database error occurred.' });
+  }
+};
+
+/**
+ * Increment video views count with IP and session cooldown protection
+ */
+exports.incrementVideoView = async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) return res.status(400).json({ error: 'Invalid video ID.' });
+
+  const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+  const cooldownSec = parseInt(process.env.VIEW_COOLDOWN_SEC) || 1800; // default 30 minutes
+  const cacheKey = `cooldown_view_${ip}_video_${id}`;
+
+  try {
+    const isCooldown = await cache.get(cacheKey);
+    if (isCooldown) {
+      return res.json({ status: 'cooldown_active', views_count: null });
+    }
+
+    // Set IP view cooldown in cache
+    await cache.set(cacheKey, '1', cooldownSec);
+
+    // Increment view counter in DB
+    await db.query('UPDATE videos SET views_count = views_count + 1 WHERE id = ?', [id]);
+    
+    // Invalidate caches
+    await cache.del(`video_${id}`);
+    await cache.del('feed_videos_*');
+
+    // Retrieve fresh views count
+    const [rows] = await db.query('SELECT views_count FROM videos WHERE id = ?', [id]);
+    const newViews = rows[0] ? rows[0].views_count : 0;
+
+    res.json({ status: 'counted', views_count: newViews });
+  } catch (err) {
+    console.error('Increment video view error:', err);
+    res.status(500).json({ error: 'Database error incrementing view count.' });
   }
 };

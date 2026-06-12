@@ -110,9 +110,7 @@ INSERT INTO settings (`key`, `value`) VALUES
 ('analytics_code', '<!-- Global Analytics Code Placeholder (Google Analytics, Tag Manager, Facebook Pixel) -->')
 ON DUPLICATE KEY UPDATE `value` = VALUES(`value`);
 
--- Seed default admin user (username: admin, password: admin123, encrypted with bcrypt: $2a$10$7R9rR611.D41k4k1k4k1k.m1S/lX7P845iL4d7rR7p1Vd3rR7rR7r)
--- Wait, let's write a standard bcrypt hash for password "admin123"
--- Let's use: $2a$10$1Yv2sV/5mCqXp9z5z18JCeC4M1nFvxk7m8dE05wWc.V0G0t7Y6Tz6 (which is definitely "admin123")
+-- Seed default admin user (username: admin, password: admin123)
 INSERT INTO users (username, password, role) VALUES
-('admin', '$2a$10$1Yv2sV/5mCqXp9z5z18JCeC4M1nFvxk7m8dE05wWc.V0G0t7Y6Tz6', 'admin')
+('admin', '$2a$10$JX94dBn5hwIW..0ZMW1fd.kl4Ih25As511f6TFZp5TOEVwo9qyMGG', 'admin')
 ON DUPLICATE KEY UPDATE role = 'admin';

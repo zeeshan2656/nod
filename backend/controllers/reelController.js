@@ -138,17 +138,35 @@ exports.listReels = async (req, res) => {
 };
 
 /**
- * Increment view count for a reel (async non-blocking)
+ * Increment view count for a reel (with IP cooldown duplicate protection)
  */
 exports.incrementReelView = async (req, res) => {
   const id = parseInt(req.params.id);
   if (isNaN(id)) return res.status(400).json({ error: 'Invalid reel ID.' });
 
+  const ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+  const cooldownSec = parseInt(process.env.VIEW_COOLDOWN_SEC) || 1800; // default 30 mins
+  const cacheKey = `cooldown_view_${ip}_reel_${id}`;
+
   try {
+    const isCooldown = await cache.get(cacheKey);
+    if (isCooldown) {
+      return res.json({ status: 'cooldown_active', views_count: null });
+    }
+
+    // Set IP view cooldown in cache
+    await cache.set(cacheKey, '1', cooldownSec);
+
+    // Update DB
     await db.query('UPDATE reels SET views_count = views_count + 1 WHERE id = ?', [id]);
     await cache.del(`reel_${id}`);
     await cache.del('feed_reels_*');
-    res.json({ success: true });
+
+    // Retrieve fresh views count
+    const [rows] = await db.query('SELECT views_count FROM reels WHERE id = ?', [id]);
+    const newViews = rows[0] ? rows[0].views_count : 0;
+
+    res.json({ status: 'counted', views_count: newViews });
   } catch (err) {
     console.error('Reel view increment error:', err);
     res.status(500).json({ error: 'Database error incrementing views.' });
@@ -175,7 +193,11 @@ exports.deleteReel = async (req, res) => {
 
     // Clean files
     if (reel.status === 'processing') {
-      const origPath = path.isAbsolute(reel.file_path) ? reel.file_path : path.join(__dirname, '..', reel.file_path);
+      let relPath = reel.file_path;
+      if (relPath.startsWith('/')) {
+        relPath = relPath.substring(1);
+      }
+      const origPath = path.resolve(__dirname, '..', relPath);
       if (fs.existsSync(origPath)) fs.unlinkSync(origPath);
     }
 
@@ -232,5 +254,27 @@ exports.likeReel = async (req, res) => {
   } catch (err) {
     console.error('Like reel error:', err);
     res.status(500).json({ error: 'Database error occurred.' });
+  }
+};
+
+/**
+ * Update a reel's details (Admin-only)
+ */
+exports.updateReel = async (req, res) => {
+  const id = parseInt(req.params.id);
+  const { title } = req.body;
+
+  if (isNaN(id)) return res.status(400).json({ error: 'Invalid reel ID.' });
+  if (!title || !title.trim()) return res.status(400).json({ error: 'Title is required.' });
+
+  try {
+    await db.query('UPDATE reels SET title = ? WHERE id = ?', [title, id]);
+    await cache.del(`reel_${id}`);
+    await cache.del('feed_reels_*');
+
+    res.json({ message: 'Reel updated successfully.' });
+  } catch (err) {
+    console.error('Update reel error:', err);
+    res.status(500).json({ error: 'Database error updating reel.' });
   }
 };

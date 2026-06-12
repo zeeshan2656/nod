@@ -63,4 +63,7 @@ router.delete('/:id', requireAdmin, reelController.deleteReel);
 // 5. Like/Unlike a reel (Authenticated users)
 router.post('/:id/like', requireAuth, reelController.likeReel);
 
+// 6. Update a reel (Admin-only)
+router.put('/:id', requireAdmin, reelController.updateReel);
+
 module.exports = router;
