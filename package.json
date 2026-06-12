@@ -1,0 +1,24 @@
+{
+  "name": "nodejs-hosting-test-app",
+  "version": "1.0.0",
+  "description": "A simple Node.js Express.js application to test cPanel Node.js hosting setup and session configuration.",
+  "main": "app.js",
+  "scripts": {
+    "start": "node app.js",
+    "dev": "nodemon app.js"
+  },
+  "keywords": [
+    "nodejs",
+    "cpanel",
+    "express",
+    "session",
+    "test"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "ejs": "^3.1.10",
+    "express": "^4.19.2",
+    "express-session": "^1.18.0"
+  }
+}

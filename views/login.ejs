@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login - Node.js Hosting Test App</title>
+  <!-- Link to the external premium stylesheet -->
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <h1>Account Login</h1>
+      <p>Please enter credentials to access the secure dashboard.</p>
+      
+      <!-- Error Message Banner (renders dynamically from server session/flash context) -->
+      <% if (locals.error && error) { %>
+        <div class="alert alert-error" id="login-error-alert">
+          <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+          </svg>
+          <%= error %>
+        </div>
+      <% } %>
+      
+      <!-- Login Form -->
+      <form action="/login" method="POST">
+        <!-- Username Field -->
+        <div class="form-group">
+          <label for="username">Username</label>
+          <div class="input-wrapper">
+            <input type="text" id="username" name="username" placeholder="e.g. 123" required autocomplete="username">
+          </div>
+        </div>
+        
+        <!-- Password Field -->
+        <div class="form-group">
+          <label for="password">Password</label>
+          <div class="input-wrapper">
+            <input type="password" id="password" name="password" placeholder="e.g. 123" required autocomplete="current-password">
+          </div>
+        </div>
+        
+        <!-- Submit Button -->
+        <button type="submit" class="btn btn-primary" id="login-submit-btn">
+          Log In
+        </button>
+      </form>
+      
+      <!-- Return Link -->
+      <a href="/" class="btn btn-secondary" style="margin-top: 1rem;">
+        Back to Welcome Screen
+      </a>
+    </div>
+    
+    <div class="footer">
+      Node.js Hosting Test App &bull; Powered by Express.js
+    </div>
+  </div>
+</body>
+</html>

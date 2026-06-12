@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard - Node.js Hosting Test App</title>
+  <!-- Link to the external premium stylesheet -->
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="container wide">
+    <div class="card">
+      <!-- Active success badge -->
+      <div class="status-badge">
+        <span class="status-dot"></span>
+        Login Successful
+      </div>
+      
+      <h1>Dashboard</h1>
+      <p>Node.js Hosting Test Passed successfully!</p>
+      
+      <!-- Success Message Banner -->
+      <div class="alert alert-success" id="test-passed-alert">
+        <svg width="20" height="20" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"></path>
+        </svg>
+        Your Node.js environment is configured and running properly.
+      </div>
+      
+      <!-- Server Environment Statistics -->
+      <div class="stats-grid">
+        <!-- Logged-in User -->
+        <div class="stat-item">
+          <div class="stat-label">Logged-in Username</div>
+          <div class="stat-value" id="stat-username"><%= username %></div>
+        </div>
+        
+        <!-- Node.js Version -->
+        <div class="stat-item">
+          <div class="stat-label">Node.js Version</div>
+          <div class="stat-value" id="stat-node-version"><%= nodeVersion %></div>
+        </div>
+        
+        <!-- Server Hostname -->
+        <div class="stat-item">
+          <div class="stat-label">Server Hostname</div>
+          <div class="stat-value" id="stat-hostname"><%= hostname %></div>
+        </div>
+        
+        <!-- Current Server Time -->
+        <div class="stat-item">
+          <div class="stat-label">Current Server Time</div>
+          <div class="stat-value" id="stat-server-time"><%= serverTime %></div>
+        </div>
+      </div>
+      
+      <!-- Logout Button -->
+      <a href="/logout" class="btn btn-danger" id="logout-btn">
+        Log Out
+      </a>
+    </div>
+    
+    <div class="footer">
+      Node.js Hosting Test App &bull; Powered by Express.js
+    </div>
+  </div>
+</body>
+</html>
