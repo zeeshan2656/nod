@@ -63,7 +63,7 @@ exports.getComments = async (req, res) => {
       }
     });
 
-    await cache.set(cacheKey, rootComments, 5); // 5-second TTL cache for hot comments
+    await cache.set(cacheKey, rootComments, 60); // 60-second TTL cache (invalidated on mutation)
 
     res.json(rootComments);
   } catch (err) {

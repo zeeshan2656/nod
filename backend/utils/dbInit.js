@@ -46,16 +46,18 @@ async function initializeDatabase() {
       console.log('[Database] Database tables initialized successfully!');
     }
 
-    // Always guarantee that landing page row ad slots are seeded
-    const landingAds = [
+    // Always guarantee that landing page row and watch page ad slots are seeded
+    const adPlacementsToSeed = [
       ['landing_row_1', 'Landing Page Row 1 Ad', '<!-- Landing Page Row 1 Ad Placeholder -->', 0],
       ['landing_row_2', 'Landing Page Row 2 Ad', '<!-- Landing Page Row 2 Ad Placeholder -->', 0],
       ['landing_row_3', 'Landing Page Row 3 Ad', '<!-- Landing Page Row 3 Ad Placeholder -->', 0],
       ['landing_row_4', 'Landing Page Row 4 Ad', '<!-- Landing Page Row 4 Ad Placeholder -->', 0],
-      ['landing_row_5', 'Landing Page Row 5 Ad', '<!-- Landing Page Row 5 Ad Placeholder -->', 0]
+      ['landing_row_5', 'Landing Page Row 5 Ad', '<!-- Landing Page Row 5 Ad Placeholder -->', 0],
+      ['watch_page_desktop', 'Watch Page Desktop Ad', '<!-- Watch Page Desktop Ad Placeholder -->', 0],
+      ['watch_page_mobile', 'Watch Page Mobile Ad', '<!-- Watch Page Mobile Ad Placeholder -->', 0]
     ];
 
-    for (const [placement, name, code, is_active] of landingAds) {
+    for (const [placement, name, code, is_active] of adPlacementsToSeed) {
       await db.query(
         `INSERT INTO ads (placement, name, code, is_active) 
          VALUES (?, ?, ?, ?) 
@@ -64,8 +66,9 @@ async function initializeDatabase() {
       );
     }
 
-    // Always clean up the legacy between_cards placement if it exists
+    // Always clean up the legacy placements if they exist
     await db.query("DELETE FROM ads WHERE placement = 'between_cards'");
+    await db.query("DELETE FROM ads WHERE placement = 'watch_page'");
   } catch (err) {
     console.error('[Database] Failed to auto-initialize database:', err.message);
   }

@@ -228,7 +228,12 @@ exports.getVideo = async (req, res) => {
   if (isNaN(id)) return res.status(400).json({ error: 'Invalid video ID.' });
 
   try {
-    const [rows] = await db.query('SELECT * FROM videos WHERE id = ?', [id]);
+    const [rows] = await db.query(
+      `SELECT v.*, (SELECT COUNT(*) FROM comments WHERE video_id = v.id) as comments_count 
+       FROM videos v 
+       WHERE v.id = ?`,
+      [id]
+    );
     const video = rows[0];
 
     if (!video) {
@@ -595,5 +600,36 @@ exports.incrementVideoView = async (req, res) => {
   } catch (err) {
     console.error('Increment video view error:', err);
     res.status(500).json({ error: 'Database error incrementing view count.' });
+  }
+};
+
+/**
+ * Fetch related videos (excluding current video, optimized database fields, cached)
+ */
+exports.getRelatedVideos = async (req, res) => {
+  const id = parseInt(req.params.id);
+  if (isNaN(id)) return res.status(400).json({ error: 'Invalid video ID.' });
+
+  const cacheKey = `related_videos_${id}`;
+
+  try {
+    const cachedData = await cache.get(cacheKey);
+    if (cachedData) {
+      return res.json(cachedData);
+    }
+
+    // Limit returned fields for speed, query completed ready status only, exclude current video id
+    const [rows] = await db.query(
+      'SELECT id, title, views_count FROM videos WHERE id != ? AND status = "ready" ORDER BY created_at DESC LIMIT 10',
+      [id]
+    );
+
+    // Cache related videos for 60 seconds (since videos catalog updates are rare)
+    await cache.set(cacheKey, rows, 60);
+
+    res.json(rows);
+  } catch (err) {
+    console.error('Fetch related videos error:', err);
+    res.status(500).json({ error: 'Database error fetching related videos.' });
   }
 };

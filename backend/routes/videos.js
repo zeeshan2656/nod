@@ -59,6 +59,9 @@ router.get('/', authenticateToken, videoController.listVideos);
 // 3. Fetch specific video details
 router.get('/:id', videoController.getVideo);
 
+// 3.5. Fetch related videos
+router.get('/:id/related', videoController.getRelatedVideos);
+
 // 4. Stream dynamically extracted video thumbnail frame
 router.get('/:id/thumbnail', videoController.streamThumbnail);
 
