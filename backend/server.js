@@ -109,9 +109,12 @@ app.use((err, req, res, next) => {
 });
 
 // Run Server
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`===================================================`);
-  console.log(` ULTRA-FAST VIDEO & REELS API RUNNING ON PORT ${PORT}`);
-  console.log(` Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`===================================================`);
+const initializeDatabase = require('./utils/dbInit');
+initializeDatabase().then(() => {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`===================================================`);
+    console.log(` ULTRA-FAST VIDEO & REELS API RUNNING ON PORT ${PORT}`);
+    console.log(` Environment: ${process.env.NODE_ENV || 'development'}`);
+    console.log(`===================================================`);
+  });
 });
