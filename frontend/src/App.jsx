@@ -62,49 +62,22 @@ function AppLayout() {
   return (
     <>
       {isReelsPage ? (
-        /* Reels Overlay Back/Home Buttons always visible fixed top-left */
+        /* Reels Overlay Back Button always visible fixed top-left */
         <div className="reels-navigation-overlay" style={{
           position: 'fixed',
           top: '16px',
           left: '16px',
-          zIndex: 2000,
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px'
+          zIndex: 2000
         }}>
           <Link to="/" className="reels-back-btn" style={{
-            backgroundColor: 'rgba(0, 0, 0, 0.6)',
             color: '#fff',
-            border: '1px solid #2f2f2f',
-            padding: '8px 14px',
-            borderRadius: '20px',
-            fontSize: '13px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
+            fontSize: '28px',
             cursor: 'pointer',
-            backdropFilter: 'blur(8px)',
-            fontWeight: '600',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.5)'
+            textShadow: '0 1px 4px rgba(0,0,0,0.8)',
+            display: 'inline-block',
+            lineHeight: 1
           }}>
-            <span>←</span> Back
-          </Link>
-          <Link to="/" className="reels-home-btn" style={{
-            backgroundColor: 'rgba(0, 0, 0, 0.6)',
-            color: '#fff',
-            border: '1px solid #2f2f2f',
-            width: '36px',
-            height: '36px',
-            borderRadius: '50%',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            fontSize: '15px',
-            cursor: 'pointer',
-            backdropFilter: 'blur(8px)',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.5)'
-          }} title="Home">
-            🏠
+            ←
           </Link>
         </div>
       ) : (

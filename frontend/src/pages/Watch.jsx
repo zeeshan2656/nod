@@ -1081,11 +1081,11 @@ export default function Watch() {
             </div>
           )}
 
-          {/* 5. Related Videos */}
-          {renderRelatedVideos()}
-
-          {/* 6. Comments Section */}
+          {/* 5. Comments Section */}
           {showComments && renderCommentsSection()}
+
+          {/* 6. Related Videos */}
+          {renderRelatedVideos()}
         </div>
       ) : (
         /* Desktop Layout */

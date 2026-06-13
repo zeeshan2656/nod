@@ -178,7 +178,7 @@ function ReelItem({ reel, isActive, shouldPreload, isMuted, setIsMuted }) {
           playsInline
           muted={isMuted}
           poster={`${API_BASE_URL}/api/reels/${reel.id}/thumbnail`}
-          preload={isActive ? 'auto' : (shouldPreload ? 'metadata' : 'none')}
+          preload={isActive ? 'auto' : (shouldPreload ? 'auto' : 'none')}
         />
       </div>
 
@@ -320,18 +320,29 @@ export default function Reels() {
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(true);
   const [activeReelIndex, setActiveReelIndex] = useState(0);
-  const [isMuted, setIsMuted] = useState(true);
+  const [isMuted, setIsMuted] = useState(false);
 
   const containerRef = useRef(null);
 
-  // Load initial reels
+  // Load initial reels & disable document scrolling for a clean TikTok-style interface
   useEffect(() => {
     fetchReels();
+
+    const originalOverflow = document.body.style.overflow;
+    const originalHtmlOverflow = document.documentElement.style.overflow;
+    
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    
+    return () => {
+      document.body.style.overflow = originalOverflow;
+      document.documentElement.style.overflow = originalHtmlOverflow;
+    };
   }, []);
 
   const fetchReels = async (cursor = null) => {
     try {
-      let url = '/reels?limit=5';
+      let url = '/reels?limit=10';
       if (cursor) {
         url += `&cursor_time=${encodeURIComponent(cursor.cursor_time)}&cursor_id=${cursor.cursor_id}`;
       }
@@ -373,8 +384,8 @@ export default function Reels() {
           if (!isNaN(index)) {
             setActiveReelIndex(index);
 
-            // Fetch more reels when user scrolls close to the end (e.g. at the 2nd to last reel)
-            if (index >= reels.length - 2 && hasMore) {
+            // Fetch more reels when user is 5 reels away from the end to keep preloading buffer full
+            if (index >= reels.length - 5 && hasMore) {
               fetchReels(nextCursor);
             }
           }
@@ -390,7 +401,7 @@ export default function Reels() {
     };
   }, [reels, hasMore, nextCursor]);
 
-  if (loading) {
+  if (loading && reels.length === 0) {
     return <div style={{ textAlign: 'center', padding: '50px', color: 'var(--text-muted)' }}>Loading Reels feed...</div>;
   }
 
@@ -424,9 +435,9 @@ export default function Reels() {
       {items.map((item) => {
         const isActive = activeReelIndex === item.index;
         
-        // Smart Prefetch: Preload if the current active item is index X, and this item is X+1 or X+2
-        const shouldPreload = item.index === activeReelIndex + 1 || item.index === activeReelIndex + 2;
-        const isRendered = item.index >= activeReelIndex - 1 && item.index <= activeReelIndex + 2;
+        // Advanced preloading: Preload the next 5 reels in the background
+        const shouldPreload = item.index > activeReelIndex && item.index <= activeReelIndex + 5;
+        const isRendered = item.index >= activeReelIndex - 1 && item.index <= activeReelIndex + 5;
 
         if (item.type === 'ad') {
           return (

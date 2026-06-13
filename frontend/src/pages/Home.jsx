@@ -12,7 +12,7 @@ export default function Home() {
 
   const page = parseInt(searchParams.get('page')) || 1;
   const searchQuery = searchParams.get('search') || '';
-  const limit = 20;
+  const limit = 12;
 
   // Load active ads once on mount
   useEffect(() => {
