@@ -27,6 +27,16 @@ export default function AdminDashboard() {
   const [loadingStats, setLoadingStats] = useState(true);
   const [toast, setToast] = useState({ message: '', type: 'success' });
 
+  // Multi-Selection States
+  const [selectedVideoIds, setSelectedVideoIds] = useState([]);
+  const [selectedReelIds, setSelectedReelIds] = useState([]);
+
+  // Reset selections when changing tabs
+  useEffect(() => {
+    setSelectedVideoIds([]);
+    setSelectedReelIds([]);
+  }, [activeTab]);
+
   // Enforce admin guard
   useEffect(() => {
     if (!authLoading && (!user || !isAdmin)) {
@@ -137,6 +147,72 @@ export default function AdminDashboard() {
     }
   };
 
+  const toggleSelectVideo = (id) => {
+    setSelectedVideoIds(prev =>
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectReel = (id) => {
+    setSelectedReelIds(prev =>
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleSelectAllVideos = () => {
+    if (videos.length === 0) return;
+    if (selectedVideoIds.length === videos.length) {
+      setSelectedVideoIds([]);
+    } else {
+      setSelectedVideoIds(videos.map(v => v.id));
+    }
+  };
+
+  const handleSelectAllReels = () => {
+    if (reels.length === 0) return;
+    if (selectedReelIds.length === reels.length) {
+      setSelectedReelIds([]);
+    } else {
+      setSelectedReelIds(reels.map(r => r.id));
+    }
+  };
+
+  const handleBulkDeleteVideos = async () => {
+    if (selectedVideoIds.length === 0) return;
+    if (!window.confirm(`Are you sure you want to permanently delete the ${selectedVideoIds.length} selected videos?`)) return;
+    
+    setToast({ message: 'Deleting selected videos...', type: 'info' });
+    try {
+      await Promise.all(selectedVideoIds.map(id => api.delete(`/videos/${id}`)));
+      setVideos(prev => prev.filter(v => !selectedVideoIds.includes(v.id)));
+      setStats(prev => ({ ...prev, videos: Math.max(prev.videos - selectedVideoIds.length, 0) }));
+      setToast({ message: `Successfully deleted ${selectedVideoIds.length} videos.`, type: 'success' });
+      setSelectedVideoIds([]);
+    } catch (err) {
+      setToast({ message: 'Some or all video deletions failed.', type: 'danger' });
+      loadVideosFeed();
+      loadStats();
+    }
+  };
+
+  const handleBulkDeleteReels = async () => {
+    if (selectedReelIds.length === 0) return;
+    if (!window.confirm(`Are you sure you want to permanently delete the ${selectedReelIds.length} selected reels?`)) return;
+
+    setToast({ message: 'Deleting selected reels...', type: 'info' });
+    try {
+      await Promise.all(selectedReelIds.map(id => api.delete(`/reels/${id}`)));
+      setReels(prev => prev.filter(r => !selectedReelIds.includes(r.id)));
+      setStats(prev => ({ ...prev, reels: Math.max(prev.reels - selectedReelIds.length, 0) }));
+      setToast({ message: `Successfully deleted ${selectedReelIds.length} reels.`, type: 'success' });
+      setSelectedReelIds([]);
+    } catch (err) {
+      setToast({ message: 'Some or all reel deletions failed.', type: 'danger' });
+      loadReelsFeed();
+      loadStats();
+    }
+  };
+
   const handleEditReel = async (id, currentTitle) => {
     const newTitle = prompt('Enter new title for the reel:', currentTitle);
     if (newTitle === null) return;
@@ -205,6 +281,45 @@ export default function AdminDashboard() {
         </div>
       </div>
 
+      {/* Bulk Action Controls */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: '10px 16px',
+        backgroundColor: '#161616',
+        borderBottom: '1px solid var(--border-color)',
+        gap: '12px',
+        flexWrap: 'wrap'
+      }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '12px', color: 'var(--text-muted)' }}>
+          <input
+            type="checkbox"
+            checked={
+              activeTab === 'videos'
+                ? videos.length > 0 && selectedVideoIds.length === videos.length
+                : reels.length > 0 && selectedReelIds.length === reels.length
+            }
+            onChange={activeTab === 'videos' ? handleSelectAllVideos : handleSelectAllReels}
+            style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+          />
+          {activeTab === 'videos'
+            ? `Select All Videos (${selectedVideoIds.length} selected)`
+            : `Select All Reels (${selectedReelIds.length} selected)`
+          }
+        </label>
+        
+        {((activeTab === 'videos' && selectedVideoIds.length > 0) || (activeTab === 'reels' && selectedReelIds.length > 0)) && (
+          <button
+            onClick={activeTab === 'videos' ? handleBulkDeleteVideos : handleBulkDeleteReels}
+            className="btn btn-danger"
+            style={{ padding: '4px 10px', fontSize: '11px', height: 'auto' }}
+          >
+            Delete Selected ({activeTab === 'videos' ? selectedVideoIds.length : selectedReelIds.length})
+          </button>
+        )}
+      </div>
+
       {/* Responsive Full-Width Lists (Issue #5 & #6: No boxed tables, no horizontal scrolls, lazy-loaded) */}
       {activeTab === 'videos' ? (
         <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -223,6 +338,13 @@ export default function AdminDashboard() {
                   backgroundColor: 'var(--card-bg)'
                 }}
               >
+                {/* Multi-select Checkbox */}
+                <input
+                  type="checkbox"
+                  checked={selectedVideoIds.includes(video.id)}
+                  onChange={() => toggleSelectVideo(video.id)}
+                  style={{ width: '16px', height: '16px', cursor: 'pointer', flexShrink: 0, marginRight: '4px' }}
+                />
                 {/* Thumbnail */}
                 <div style={{ width: '90px', aspectRatio: '16/9', backgroundColor: '#000', position: 'relative', flexShrink: 0, borderRadius: '1px', overflow: 'hidden' }}>
                   <img 
@@ -305,6 +427,13 @@ export default function AdminDashboard() {
                   backgroundColor: 'var(--card-bg)'
                 }}
               >
+                {/* Multi-select Checkbox */}
+                <input
+                  type="checkbox"
+                  checked={selectedReelIds.includes(reel.id)}
+                  onChange={() => toggleSelectReel(reel.id)}
+                  style={{ width: '16px', height: '16px', cursor: 'pointer', flexShrink: 0, marginRight: '4px' }}
+                />
                 {/* Visual Placeholder */}
                 <div style={{ width: '50px', height: '80px', backgroundColor: '#000', display: 'flex', justifyContent: 'center', alignItems: 'center', flexShrink: 0, border: '1px solid var(--border-color)', borderRadius: '1px' }}>
                   <span style={{ fontSize: '16px' }}>🎥</span>

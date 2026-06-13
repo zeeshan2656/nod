@@ -14,6 +14,7 @@ require('dotenv').config({ path: envPath });
 
 // Initialize Express App
 const app = express();
+app.set('trust proxy', 1); // Trust first proxy (cPanel / Phusion Passenger)
 const PORT = process.env.PORT || 5000;
 
 // Security and Optimization Middlewares

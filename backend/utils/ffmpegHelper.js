@@ -2,6 +2,28 @@ const { exec, spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
+// Resolve paths for ffmpeg and ffprobe from environment variables or fallback npm installer packages
+let ffmpegPath = process.env.FFMPEG_PATH || 'ffmpeg';
+let ffprobePath = process.env.FFPROBE_PATH || 'ffprobe';
+
+if (ffmpegPath === 'ffmpeg') {
+  try {
+    const ffmpegInstaller = require('@ffmpeg-installer/ffmpeg');
+    ffmpegPath = ffmpegInstaller.path;
+  } catch (e) {
+    // Fallback to global ffmpeg
+  }
+}
+
+if (ffprobePath === 'ffprobe') {
+  try {
+    const ffprobeInstaller = require('@ffprobe-installer/ffprobe');
+    ffprobePath = ffprobeInstaller.path;
+  } catch (e) {
+    // Fallback to global ffprobe
+  }
+}
+
 /**
  * Helper to calculate Greatest Common Divisor (for aspect ratio)
  */
@@ -17,7 +39,7 @@ function gcd(a, b) {
 function getVideoMetadata(filePath) {
   return new Promise((resolve, reject) => {
     // Escape path for Windows
-    const cmd = `ffprobe -v error -select_streams v:0 -show_entries stream=width,height,r_frame_rate -show_entries format=duration,size -of json "${filePath}"`;
+    const cmd = `"${ffprobePath}" -v error -select_streams v:0 -show_entries stream=width,height,r_frame_rate -show_entries format=duration,size -of json "${filePath}"`;
     
     exec(cmd, (error, stdout, stderr) => {
       if (error) {
@@ -68,7 +90,7 @@ function getVideoMetadata(filePath) {
 function extractFrameToBuffer(filePath, timestamp) {
   return new Promise((resolve, reject) => {
     // Fast-seek input seek (-ss before -i) for ultra-fast frame extraction (under 100ms)
-    const ffmpegProcess = spawn('ffmpeg', [
+    const ffmpegProcess = spawn(ffmpegPath, [
       '-ss', timestamp.toFixed(3),
       '-i', filePath,
       '-vframes', '1',
@@ -187,7 +209,7 @@ async function transcodeToHLS(inputPath, outputDir, height) {
       playlistPath
     ];
 
-    await runProcess('ffmpeg', args);
+    await runProcess(ffmpegPath, args);
   }
 
   // Create Master Playlist index
@@ -211,5 +233,7 @@ async function transcodeToHLS(inputPath, outputDir, height) {
 module.exports = {
   getVideoMetadata,
   extractFrameToBuffer,
-  transcodeToHLS
+  transcodeToHLS,
+  ffmpegPath,
+  ffprobePath
 };

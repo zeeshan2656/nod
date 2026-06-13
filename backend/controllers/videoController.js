@@ -2,7 +2,7 @@ const db = require('../config/db');
 const cache = require('../config/cache');
 const path = require('path');
 const fs = require('fs');
-const { getVideoMetadata, extractFrameToBuffer } = require('../utils/ffmpegHelper');
+const { getVideoMetadata, extractFrameToBuffer, ffmpegPath, ffprobePath } = require('../utils/ffmpegHelper');
 const transcodeQueue = require('../utils/transcodeQueue');
 
 // Helpers for folder directories
@@ -337,7 +337,7 @@ exports.getTemporaryThumbnails = async (req, res) => {
     // 4 & 5. Verify FFmpeg access and video metadata extraction (corrupted file check)
     const { execSync } = require('child_process');
     try {
-      const probeCmd = `ffprobe -v error -select_streams v:0 -show_entries stream=codec_name -of json "${sourcePath}"`;
+      const probeCmd = `"${ffprobePath}" -v error -select_streams v:0 -show_entries stream=codec_name -of json "${sourcePath}"`;
       const probeOut = execSync(probeCmd).toString();
       const probeData = JSON.parse(probeOut);
       if (!probeData.streams || probeData.streams.length === 0) {
@@ -378,7 +378,7 @@ exports.getTemporaryThumbnails = async (req, res) => {
       ];
 
       // Spawn FFmpeg to extract frame on disk
-      const ffProcess = spawnSync('ffmpeg', ffmpegArgs);
+      const ffProcess = spawnSync(ffmpegPath, ffmpegArgs);
       
       if (ffProcess.status !== 0) {
         console.error(`[Edit Diagnostics] FFmpeg extraction failed for frame ${i}:`, ffProcess.stderr.toString());
