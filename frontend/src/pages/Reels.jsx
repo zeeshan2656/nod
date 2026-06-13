@@ -6,7 +6,7 @@ import Toast from '../components/Toast';
 import Hls from 'hls.js';
 
 // Individual Reel Component
-function ReelItem({ reel, isActive, shouldPreload }) {
+function ReelItem({ reel, isActive, shouldPreload, isMuted, setIsMuted }) {
   const videoRef = useRef(null);
   const hlsRef = useRef(null);
   const viewLogged = useRef(false);
@@ -16,8 +16,7 @@ function ReelItem({ reel, isActive, shouldPreload }) {
   const { user } = useContext(AuthContext);
   const [toast, setToast] = useState('');
   
-  // Mute & Comments State
-  const [isMuted, setIsMuted] = useState(true);
+  // Comments State
   const [showCommentsOverlay, setShowCommentsOverlay] = useState(false);
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState('');
@@ -81,8 +80,11 @@ function ReelItem({ reel, isActive, shouldPreload }) {
             hlsInstance.loadSource(videoUrl);
             hlsInstance.attachMedia(videoElement);
             hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
-              if (isActiveRef.current && videoElement.paused) {
-                videoElement.play().catch(err => console.warn('Autoplay blocked on manifest:', err.message));
+              if (isActiveRef.current) {
+                videoElement.muted = isMuted; // Sync muted state programmatically
+                if (videoElement.paused) {
+                  videoElement.play().catch(err => console.warn('Autoplay blocked on manifest:', err.message));
+                }
               }
             });
           } else {
@@ -96,6 +98,7 @@ function ReelItem({ reel, isActive, shouldPreload }) {
 
       // Handle Playback State based on isActive
       if (isActive) {
+        videoElement.muted = isMuted; // Always sync muted state before playing!
         if (videoElement.paused) {
           videoElement.play().catch(err => console.warn('Autoplay blocked:', err.message));
         }
@@ -122,7 +125,7 @@ function ReelItem({ reel, isActive, shouldPreload }) {
       videoElement.load();
       viewLogged.current = false;
     }
-  }, [isActive, shouldPreload, videoUrl, reel.status, reel.id]);
+  }, [isActive, shouldPreload, videoUrl, reel.status, reel.id, isMuted]);
 
   // Clean up HLS player on unmount
   useEffect(() => {
@@ -316,6 +319,7 @@ export default function Reels() {
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(true);
   const [activeReelIndex, setActiveReelIndex] = useState(0);
+  const [isMuted, setIsMuted] = useState(true);
 
   const containerRef = useRef(null);
 
@@ -446,6 +450,8 @@ export default function Reels() {
                 reel={item.data}
                 isActive={isActive}
                 shouldPreload={shouldPreload}
+                isMuted={isMuted}
+                setIsMuted={setIsMuted}
               />
             ) : (
               <div style={{ height: '100%', width: '100%', backgroundColor: '#000' }} />

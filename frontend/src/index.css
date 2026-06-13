@@ -733,6 +733,22 @@ main.main-reels {
   }
 }
 
+/* Desktop screen: show menus at the top even on watch pages */
+@media (min-width: 601px) {
+  header.header-bottom {
+    position: fixed !important;
+    top: 0 !important;
+    bottom: auto !important;
+    border-bottom: 1px solid var(--border-color) !important;
+    border-top: none !important;
+  }
+
+  main.main-bottom {
+    margin-top: var(--header-height) !important;
+    padding-bottom: 24px !important;
+  }
+}
+
 /* Full screen reels style overrides */
 .main-reels .reels-feed-container {
   height: 100vh !important;
