@@ -5,6 +5,19 @@ const fs = require('fs');
 const { getVideoMetadata, extractFrameToBuffer, ffmpegPath, ffprobePath } = require('../utils/ffmpegHelper');
 const transcodeQueue = require('../utils/transcodeQueue');
 
+// Helper to resolve absolute or relative database file paths to absolute disk paths
+function resolveDiskPath(filePath) {
+  if (!filePath) return '';
+  if (filePath.startsWith('/uploads/') || filePath.startsWith('uploads/')) {
+    let relPath = filePath;
+    if (relPath.startsWith('/')) {
+      relPath = relPath.substring(1);
+    }
+    return path.resolve(__dirname, '..', relPath);
+  }
+  return filePath;
+}
+
 // Helpers for folder directories
 const UPLOAD_ROOT = path.join(__dirname, '..', 'uploads');
 const TEMP_DIR = path.join(UPLOAD_ROOT, 'temp');
@@ -257,11 +270,7 @@ exports.streamThumbnail = async (req, res) => {
     }
 
     // Determine target file path
-    let relativePath = video.file_path;
-    if (relativePath.startsWith('/')) {
-      relativePath = relativePath.substring(1);
-    }
-    const sourcePath = path.resolve(__dirname, '..', relativePath);
+    const sourcePath = resolveDiskPath(video.file_path);
 
     // Verify file exists
     if (!fs.existsSync(sourcePath) && video.status !== 'ready') {
@@ -313,12 +322,8 @@ exports.getTemporaryThumbnails = async (req, res) => {
       return res.status(400).json({ error: 'Invalid path', detail: 'The video path is empty in the database.' });
     }
 
-    // Resolve path relative to backend root
-    let relativePath = video.file_path;
-    if (relativePath.startsWith('/')) {
-      relativePath = relativePath.substring(1);
-    }
-    const sourcePath = path.resolve(__dirname, '..', relativePath);
+    // Resolve path to disk
+    const sourcePath = resolveDiskPath(video.file_path);
 
     // 2. Verify file is physically present on disk
     if (!fs.existsSync(sourcePath)) {
@@ -476,11 +481,7 @@ exports.deleteVideo = async (req, res) => {
     // 2. Remove files on disk
     // If still processing, clean up original upload path
     if (video.status === 'processing') {
-      let relPath = video.file_path;
-      if (relPath.startsWith('/')) {
-        relPath = relPath.substring(1);
-      }
-      const origPath = path.resolve(__dirname, '..', relPath);
+      const origPath = resolveDiskPath(video.file_path);
       if (fs.existsSync(origPath)) fs.unlinkSync(origPath);
     }
     

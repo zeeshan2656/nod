@@ -5,6 +5,19 @@ const fs = require('fs');
 const { getVideoMetadata, extractFrameToBuffer } = require('../utils/ffmpegHelper');
 const transcodeQueue = require('../utils/transcodeQueue');
 
+// Helper to resolve absolute or relative database file paths to absolute disk paths
+function resolveDiskPath(filePath) {
+  if (!filePath) return '';
+  if (filePath.startsWith('/uploads/') || filePath.startsWith('uploads/')) {
+    let relPath = filePath;
+    if (relPath.startsWith('/')) {
+      relPath = relPath.substring(1);
+    }
+    return path.resolve(__dirname, '..', relPath);
+  }
+  return filePath;
+}
+
 // Folders
 const UPLOAD_ROOT = path.join(__dirname, '..', 'uploads');
 const TEMP_DIR = path.join(UPLOAD_ROOT, 'temp');
@@ -193,11 +206,7 @@ exports.deleteReel = async (req, res) => {
 
     // Clean files
     if (reel.status === 'processing') {
-      let relPath = reel.file_path;
-      if (relPath.startsWith('/')) {
-        relPath = relPath.substring(1);
-      }
-      const origPath = path.resolve(__dirname, '..', relPath);
+      const origPath = resolveDiskPath(reel.file_path);
       if (fs.existsSync(origPath)) fs.unlinkSync(origPath);
     }
 
@@ -313,11 +322,7 @@ exports.streamThumbnail = async (req, res) => {
       return res.status(404).json({ error: 'Reel not found.' });
     }
 
-    let relativePath = reel.file_path;
-    if (relativePath.startsWith('/')) {
-      relativePath = relativePath.substring(1);
-    }
-    const sourcePath = path.resolve(__dirname, '..', relativePath);
+    const sourcePath = resolveDiskPath(reel.file_path);
 
     if (!fs.existsSync(sourcePath) && reel.status !== 'ready') {
       return res.status(404).json({ error: 'Reel source file is not available yet.' });

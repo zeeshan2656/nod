@@ -15,4 +15,7 @@ router.put('/', requireAdmin, settingController.updateSettings);
 // 4. Fetch admin statistics metrics (Admin-only)
 router.get('/stats', requireAdmin, settingController.getStats);
 
+// 5. Run system consistency diagnostics (Admin-only)
+router.get('/diagnostics', requireAdmin, settingController.getDiagnostics);
+
 module.exports = router;
