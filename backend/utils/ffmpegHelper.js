@@ -24,6 +24,27 @@ if (ffprobePath === 'ffprobe') {
   }
 }
 
+// Ensure fallback or configured binaries have execution permissions on Unix/Linux systems
+if (process.platform !== 'win32') {
+  try {
+    if (path.isAbsolute(ffmpegPath) && fs.existsSync(ffmpegPath)) {
+      fs.chmodSync(ffmpegPath, 0o755);
+      console.log(`[FFmpeg] Ensured executable permissions (0755) on: ${ffmpegPath}`);
+    }
+  } catch (err) {
+    console.error(`[FFmpeg] Failed to set permissions on ${ffmpegPath}:`, err.message);
+  }
+
+  try {
+    if (path.isAbsolute(ffprobePath) && fs.existsSync(ffprobePath)) {
+      fs.chmodSync(ffprobePath, 0o755);
+      console.log(`[FFprobe] Ensured executable permissions (0755) on: ${ffprobePath}`);
+    }
+  } catch (err) {
+    console.error(`[FFprobe] Failed to set permissions on ${ffprobePath}:`, err.message);
+  }
+}
+
 /**
  * Helper to calculate Greatest Common Divisor (for aspect ratio)
  */
