@@ -173,6 +173,7 @@ function ReelItem({ reel, isActive, shouldPreload, isMuted, setIsMuted }) {
         <video
           ref={videoRef}
           className="reel-video"
+          style={{ width: '100%', height: '100%', objectFit: 'contain', backgroundColor: '#000' }}
           loop
           playsInline
           muted={isMuted}
