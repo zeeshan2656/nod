@@ -1,1 +1,0 @@
-import{r as e}from"./rolldown-runtime-QTnfLwEv.js";import{p as t,t as n}from"./vendor-react-DU4B1qgT.js";var r=e(t(),1),i=n();function a({message:e,type:t=`success`,onClose:n}){return(0,r.useEffect)(()=>{let e=setTimeout(()=>{n()},3e3);return()=>clearTimeout(e)},[n]),e?(0,i.jsx)(`div`,{className:`toast toast-${t}`,children:e}):null}export{a as t};

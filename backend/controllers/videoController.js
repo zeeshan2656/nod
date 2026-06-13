@@ -102,14 +102,19 @@ exports.uploadVideos = async (req, res) => {
 /**
  * List videos with cursor pagination (Optimized for MySQL indexes)
  */
+/**
+ * List videos with pagination and search filtering (Optimized for MySQL indexes)
+ */
 exports.listVideos = async (req, res) => {
-  const limit = Math.min(parseInt(req.query.limit) || 12, 50);
+  const page = parseInt(req.query.page);
+  const limit = Math.min(parseInt(req.query.limit) || (isNaN(page) ? 12 : 20), 50);
+  const search = req.query.search || req.query.q || '';
   const cursorTime = req.query.cursor_time; // ISO Timestamp or mysql format
   const cursorId = parseInt(req.query.cursor_id);
   const isAdmin = req.user && req.user.role === 'admin';
 
   // Generate cache key based on query parameters
-  const cacheKey = `feed_videos_${cursorTime || 'start'}_${cursorId || 'start'}_${limit}_${isAdmin}`;
+  const cacheKey = `feed_videos_${cursorTime || 'start'}_${cursorId || 'start'}_${page || 'start'}_${search || 'none'}_${limit}_${isAdmin}`;
   
   try {
     // Attempt to retrieve from cache
@@ -126,33 +131,70 @@ exports.listVideos = async (req, res) => {
       query += " AND status = 'ready'";
     }
 
-    // Cursor pagination logic (avoids OFFSET performance degradation)
-    if (cursorTime && cursorId) {
-      query += ' AND (created_at < ? OR (created_at = ? AND id < ?))';
-      params.push(cursorTime, cursorTime, cursorId);
+    // Search filter
+    if (search.trim() !== '') {
+      query += ' AND title LIKE ?';
+      params.push(`%${search.trim()}%`);
     }
 
-    query += ' ORDER BY created_at DESC, id DESC LIMIT ?';
-    params.push(limit + 1); // Get 1 extra to determine if there is a next page
+    let totalCount = 0;
+    if (!isNaN(page)) {
+      // Get total count of matched videos for page calculation
+      let countQuery = 'SELECT COUNT(*) as total FROM videos WHERE 1=1';
+      const countParams = [];
+      if (!isAdmin) {
+        countQuery += " AND status = 'ready'";
+      }
+      if (search.trim() !== '') {
+        countQuery += ' AND title LIKE ?';
+        countParams.push(`%${search.trim()}%`);
+      }
+      const [countRows] = await db.query(countQuery, countParams);
+      totalCount = countRows[0].total;
+    }
+
+    // Pagination selection
+    if (!isNaN(page)) {
+      // Offset pagination (1-indexed pages)
+      const targetPage = Math.max(page, 1);
+      const offset = (targetPage - 1) * limit;
+      query += ' ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?';
+      params.push(limit, offset);
+    } else {
+      // Cursor pagination
+      if (cursorTime && cursorId) {
+        query += ' AND (created_at < ? OR (created_at = ? AND id < ?))';
+        params.push(cursorTime, cursorTime, cursorId);
+      }
+      query += ' ORDER BY created_at DESC, id DESC LIMIT ?';
+      params.push(limit + 1); // Get 1 extra to determine if there is a next page
+    }
 
     const [rows] = await db.query(query, params);
     
     let nextCursor = null;
-    const hasMore = rows.length > limit;
+    let hasMore = false;
     
-    if (hasMore) {
-      // Remove the extra row
-      const nextItem = rows.pop();
-      nextCursor = {
-        cursor_time: nextItem.created_at,
-        cursor_id: nextItem.id
-      };
+    if (isNaN(page)) {
+      hasMore = rows.length > limit;
+      if (hasMore) {
+        // Remove the extra row
+        const nextItem = rows.pop();
+        nextCursor = {
+          cursor_time: nextItem.created_at,
+          cursor_id: nextItem.id
+        };
+      }
+    } else {
+      const targetPage = Math.max(page, 1);
+      hasMore = (targetPage * limit) < totalCount;
     }
 
     const responseData = {
       videos: rows,
       nextCursor,
-      hasMore
+      hasMore,
+      totalCount: !isNaN(page) ? totalCount : rows.length
     };
 
     // Cache feed data for 10 seconds (keeps page load instant but updates fast)

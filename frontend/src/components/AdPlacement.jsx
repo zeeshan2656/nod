@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import api from '../utils/api';
 
-export default function AdPlacement({ placement }) {
+export default function AdPlacement({ placement, type }) {
   const [adCode, setAdCode] = useState(null);
   const containerRef = useRef(null);
 
@@ -37,7 +37,17 @@ export default function AdPlacement({ placement }) {
     }
   }, [adCode]);
 
-  if (!adCode) return null;
+  if (!adCode) {
+    if (type === 'card') {
+      return (
+        <div className="ad-card-placeholder" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', height: '100%', width: '100%', gap: '8px' }}>
+          <span className="ad-label" style={{ fontSize: '9px', textTransform: 'uppercase', color: 'var(--text-muted)', letterSpacing: '1px' }}>Advertisement</span>
+          <div style={{ color: '#444', fontSize: '12px', fontWeight: '500' }}>Ad Partner Slot</div>
+        </div>
+      );
+    }
+    return null;
+  }
 
   return (
     <div className="ad-container">

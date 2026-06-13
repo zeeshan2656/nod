@@ -38,7 +38,17 @@ class MemoryCache {
   }
 
   del(key) {
-    this.store.delete(key);
+    if (key.includes('*')) {
+      const regexStr = '^' + key.replace(/[-\/\\^$+.()|[\]{}]/g, '\\$&').replace(/\\\*/g, '.*') + '$';
+      const regex = new RegExp(regexStr);
+      for (const k of this.store.keys()) {
+        if (regex.test(k)) {
+          this.store.delete(k);
+        }
+      }
+    } else {
+      this.store.delete(key);
+    }
   }
 
   clear() {
@@ -129,7 +139,14 @@ const cache = {
       return;
     }
     try {
-      await redisClient.del(key);
+      if (key.includes('*')) {
+        const keys = await redisClient.keys(key);
+        if (keys && keys.length > 0) {
+          await redisClient.del(keys);
+        }
+      } else {
+        await redisClient.del(key);
+      }
     } catch (err) {
       memoryCache.del(key);
     }

@@ -1,5 +1,5 @@
-import React, { Suspense, lazy, useContext } from 'react';
-import { BrowserRouter as Router, Routes, Route, Link, NavLink, Navigate, useLocation } from 'react-router-dom';
+import React, { Suspense, lazy, useContext, useState, useEffect, useRef } from 'react';
+import { BrowserRouter as Router, Routes, Route, Link, NavLink, Navigate, useLocation, useSearchParams, useNavigate } from 'react-router-dom';
 import { AuthProvider, AuthContext } from './context/AuthContext';
 import AnalyticsInjector from './components/AnalyticsInjector';
 
@@ -17,9 +17,46 @@ const AdminSettings = lazy(() => import('./pages/AdminSettings'));
 function AppLayout() {
   const { user, logout, isAdmin } = useContext(AuthContext);
   const location = useLocation();
+  const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const [searchTerm, setSearchTerm] = useState('');
+  const [isMobileSearchExpanded, setIsMobileSearchExpanded] = useState(false);
+  const debounceTimeoutRef = useRef(null);
 
   const isWatchPage = location.pathname.startsWith('/watch/');
   const isReelsPage = location.pathname.startsWith('/reels');
+
+  // Sync search input with search param in URL
+  useEffect(() => {
+    setSearchTerm(searchParams.get('search') || '');
+  }, [searchParams]);
+
+  // Clean up debounce on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimeoutRef.current) {
+        clearTimeout(debounceTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const handleSearchChange = (e) => {
+    const value = e.target.value;
+    setSearchTerm(value);
+
+    if (debounceTimeoutRef.current) {
+      clearTimeout(debounceTimeoutRef.current);
+    }
+
+    debounceTimeoutRef.current = setTimeout(() => {
+      if (location.pathname !== '/') {
+        navigate(value ? `/?search=${encodeURIComponent(value)}` : '/');
+      } else {
+        setSearchParams(value ? { search: value } : {});
+      }
+    }, 300);
+  };
 
   return (
     <>
@@ -72,12 +109,48 @@ function AppLayout() {
       ) : (
         /* Top navbar on Home/other pages, bottom navbar on Watch page */
         <header className={isWatchPage ? 'header-bottom' : 'header-top'}>
-          <Link to="/" className="logo">
+          <Link to="/" className={`logo ${isMobileSearchExpanded ? 'mobile-hidden' : ''}`}>
             <div className="logo-dot" />
             <span>UltraFast</span>
           </Link>
 
-          <nav className="nav-links">
+          {/* Search bar wrapper */}
+          <div className={`header-search-container ${isMobileSearchExpanded ? 'expanded' : ''}`}>
+            <input
+              type="text"
+              placeholder="Search videos..."
+              value={searchTerm}
+              onChange={handleSearchChange}
+              className="header-search-input"
+            />
+            {isMobileSearchExpanded && (
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMobileSearchExpanded(false);
+                  setSearchTerm('');
+                  setSearchParams({});
+                  if (location.pathname !== '/') {
+                    navigate('/');
+                  }
+                }}
+                className="header-search-close-btn"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          <nav className={`nav-links ${isMobileSearchExpanded ? 'mobile-hidden' : ''}`}>
+            {/* Mobile Search Icon trigger */}
+            <button
+              type="button"
+              className="mobile-search-trigger"
+              onClick={() => setIsMobileSearchExpanded(true)}
+            >
+              🔍
+            </button>
+
             <NavLink to="/" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
               Home
             </NavLink>
