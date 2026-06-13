@@ -78,7 +78,7 @@ CREATE TABLE IF NOT EXISTS comments (
 -- 6. Ad Placements table
 CREATE TABLE IF NOT EXISTS ads (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    placement VARCHAR(50) NOT NULL UNIQUE, -- 'header', 'footer', 'sidebar', 'video_top', 'video_bottom', 'reel_feed', 'watch_page', 'landing_row_1', 'landing_row_2', 'landing_row_3', 'landing_row_4', 'landing_row_5'
+    placement VARCHAR(50) NOT NULL UNIQUE, -- 'landing_row_1', 'landing_row_2', 'landing_row_3', 'landing_row_4', 'landing_row_5', 'watch_page_desktop', 'watch_page_mobile', 'footer_desktop', 'footer_mobile', 'video_overlay'
     name VARCHAR(100) NOT NULL,
     code TEXT NOT NULL,
     is_active TINYINT DEFAULT 1,
@@ -94,19 +94,16 @@ CREATE TABLE IF NOT EXISTS settings (
 
 -- Seed default ad placements
 INSERT INTO ads (placement, name, code, is_active) VALUES
-('header', 'Header Ad Placement', '<!-- Header Ad Placement Placeholder -->', 0),
-('footer', 'Footer Ad Placement', '<!-- Footer Ad Placement Placeholder -->', 0),
-('sidebar', 'Sidebar Ad Placement', '<!-- Sidebar Ad Placement Placeholder -->', 0),
-('video_top', 'Video Top Ad Placement', '<!-- Video Top Ad Placement Placeholder -->', 0),
-('video_bottom', 'Video Bottom Ad Placement', '<!-- Video Bottom Ad Placement Placeholder -->', 0),
-('reel_feed', 'Reel Feed Ad Placement', '<!-- Reel Feed Ad Placement Placeholder -->', 0),
-('watch_page_desktop', 'Watch Page Desktop Ad', '<!-- Watch Page Desktop Ad Placeholder -->', 0),
-('watch_page_mobile', 'Watch Page Mobile Ad', '<!-- Watch Page Mobile Ad Placeholder -->', 0),
 ('landing_row_1', 'Landing Page Row 1 Ad', '<!-- Landing Page Row 1 Ad Placeholder -->', 0),
 ('landing_row_2', 'Landing Page Row 2 Ad', '<!-- Landing Page Row 2 Ad Placeholder -->', 0),
 ('landing_row_3', 'Landing Page Row 3 Ad', '<!-- Landing Page Row 3 Ad Placeholder -->', 0),
 ('landing_row_4', 'Landing Page Row 4 Ad', '<!-- Landing Page Row 4 Ad Placeholder -->', 0),
-('landing_row_5', 'Landing Page Row 5 Ad', '<!-- Landing Page Row 5 Ad Placeholder -->', 0)
+('landing_row_5', 'Landing Page Row 5 Ad', '<!-- Landing Page Row 5 Ad Placeholder -->', 0),
+('watch_page_desktop', 'Watch Page Desktop Ad', '<!-- Watch Page Desktop Ad Placeholder -->', 0),
+('watch_page_mobile', 'Watch Page Mobile Ad', '<!-- Watch Page Mobile Ad Placeholder -->', 0),
+('footer_desktop', 'Footer Desktop Ad', '<!-- Footer Desktop Ad Placeholder -->', 0),
+('footer_mobile', 'Footer Mobile Ad', '<!-- Footer Mobile Ad Placeholder -->', 0),
+('video_overlay', 'Video Overlay Ad', '<!-- Video Overlay Ad Placeholder -->', 0)
 ON DUPLICATE KEY UPDATE updated_at = CURRENT_TIMESTAMP;
 
 -- Seed default settings

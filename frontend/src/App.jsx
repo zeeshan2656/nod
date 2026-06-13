@@ -2,6 +2,7 @@ import React, { Suspense, lazy, useContext, useState, useEffect, useRef } from '
 import { BrowserRouter as Router, Routes, Route, Link, NavLink, Navigate, useLocation, useSearchParams, useNavigate } from 'react-router-dom';
 import { AuthProvider, AuthContext } from './context/AuthContext';
 import AnalyticsInjector from './components/AnalyticsInjector';
+import AdPlacement from './components/AdPlacement';
 
 // Lazy-loaded pages (Code-splitting to reduce initial bundle footprint, boosting PageSpeed score)
 const Home = lazy(() => import('./pages/Home'));
@@ -198,9 +199,21 @@ function AppLayout() {
           textAlign: 'center', 
           fontSize: '11px', 
           color: 'var(--text-muted)',
-          marginTop: 'auto' 
+          marginTop: 'auto',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '12px'
         }}>
-          © {new Date().getFullYear()} UltraFast Video Platform. Designed for performance.
+          <div className="footer-ad-desktop" style={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
+            <AdPlacement placement="footer_desktop" />
+          </div>
+          <div className="footer-ad-mobile" style={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
+            <AdPlacement placement="footer_mobile" />
+          </div>
+          <div>
+            © {new Date().getFullYear()} UltraFast Video Platform. Designed for performance.
+          </div>
         </footer>
       )}
     </>

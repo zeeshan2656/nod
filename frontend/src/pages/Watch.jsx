@@ -29,6 +29,17 @@ export default function Watch() {
   const [isMobile, setIsMobile] = useState(window.innerWidth < 960);
   const [renderAds, setRenderAds] = useState(false);
 
+  // Overlay Ad States
+  const [showOverlayAd, setShowOverlayAd] = useState(false);
+  const [countdown, setCountdown] = useState(15);
+  const [overlayAdCode, setOverlayAdCode] = useState(null);
+  const overlayTriggered = useRef({ pre: false, mid1: false, mid2: false });
+  const showOverlayAdRef = useRef(false);
+
+  useEffect(() => {
+    showOverlayAdRef.current = showOverlayAd;
+  }, [showOverlayAd]);
+
   // Custom Video Player States
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -69,17 +80,38 @@ export default function Watch() {
     return () => clearTimeout(timer);
   }, [id]);
 
-  // Load video details and related videos (no comments loaded initially to maximize PageSpeed)
+  // Load video details, related videos, and overlay ad configuration
   useEffect(() => {
     const fetchWatchData = async () => {
       setLoading(true);
       try {
-        const videoRes = await api.get(`/videos/${id}`);
-        setVideo(videoRes.data);
+        // Fetch all data in parallel to avoid waterfalls and minimize load times
+        const [videoRes, relatedRes, adsRes] = await Promise.all([
+          api.get(`/videos/${id}`),
+          api.get(`/videos/${id}/related`).catch(err => {
+            console.error('Failed to load related videos:', err);
+            return { data: [] };
+          }),
+          api.get('/ads').catch(err => {
+            console.error('Failed to load overlay ad:', err);
+            return { data: {} };
+          })
+        ]);
 
-        // Fetch related videos using optimized endpoint
-        const relatedRes = await api.get(`/videos/${id}/related`);
+        setVideo(videoRes.data);
         setRelatedVideos(relatedRes.data || []);
+
+        const activeAds = adsRes.data || {};
+        if (activeAds && activeAds['video_overlay']) {
+          setOverlayAdCode(activeAds['video_overlay']);
+          setShowOverlayAd(true);
+          setCountdown(15);
+          overlayTriggered.current = { pre: true, mid1: false, mid2: false };
+        } else {
+          setOverlayAdCode(null);
+          setShowOverlayAd(false);
+          overlayTriggered.current = { pre: false, mid1: false, mid2: false };
+        }
       } catch (err) {
         console.error('Failed to load watch data:', err);
         setToast({ message: 'Error loading video.', type: 'danger' });
@@ -111,6 +143,36 @@ export default function Watch() {
     }
   }, [showComments, id, commentsFetched]);
 
+  // Countdown timer for overlay ad
+  useEffect(() => {
+    if (!showOverlayAd) return;
+    if (countdown <= 0) return;
+
+    const timer = setInterval(() => {
+      setCountdown(prev => prev - 1);
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [showOverlayAd, countdown]);
+
+  const triggerOverlayAd = () => {
+    if (!overlayAdCode) return;
+    if (videoRef.current) {
+      videoRef.current.pause();
+    }
+    setIsPlaying(false);
+    setCountdown(15);
+    setShowOverlayAd(true);
+  };
+
+  const handleCloseOverlayAd = () => {
+    setShowOverlayAd(false);
+    if (videoRef.current) {
+      videoRef.current.play().catch(err => console.warn('Play failed after ad dismissal:', err));
+      setIsPlaying(true);
+    }
+  };
+
   // HLS / MP4 Media Binding Lifecycle (incorporating `loading` dependency to resolve blank screen bug)
   useEffect(() => {
     if (loading || !video || !videoRef.current) return;
@@ -130,10 +192,20 @@ export default function Watch() {
       hlsRef.current = null;
     }
 
+    const playOrBlockAutoplay = () => {
+      if (!showOverlayAdRef.current) {
+        videoElement.play().catch(err => console.warn('Autoplay blocked:', err.message));
+        setIsPlaying(true);
+      } else {
+        videoElement.pause();
+        setIsPlaying(false);
+      }
+    };
+
     if (video.status === 'ready') {
       if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
         videoElement.src = videoUrl;
-        videoElement.play().catch(err => console.warn('Autoplay blocked:', err.message));
+        playOrBlockAutoplay();
       } else {
         if (Hls.isSupported()) {
           const hlsInstance = new Hls({
@@ -144,16 +216,16 @@ export default function Watch() {
           hlsInstance.loadSource(videoUrl);
           hlsInstance.attachMedia(videoElement);
           hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
-            videoElement.play().catch(err => console.warn('Autoplay blocked:', err.message));
+            playOrBlockAutoplay();
           });
         } else {
           videoElement.src = videoUrl;
-          videoElement.play().catch(err => console.warn('Autoplay blocked:', err.message));
+          playOrBlockAutoplay();
         }
       }
     } else {
       videoElement.src = videoUrl;
-      videoElement.play().catch(err => console.warn('Autoplay blocked:', err.message));
+      playOrBlockAutoplay();
     }
 
     // Force load the video element
@@ -221,8 +293,20 @@ export default function Watch() {
   // Scrubber time update syncs
   const handleTimeUpdate = () => {
     if (videoRef.current) {
-      setCurrentTime(videoRef.current.currentTime);
-      setProgress((videoRef.current.currentTime / (videoRef.current.duration || 1)) * 100);
+      const current = videoRef.current.currentTime;
+      const total = videoRef.current.duration || 1;
+      setCurrentTime(current);
+      setProgress((current / total) * 100);
+      if (total > 15) {
+        const percentage = current / total;
+        if (percentage >= 0.33 && percentage < 0.36 && !overlayTriggered.current.mid1) {
+          overlayTriggered.current.mid1 = true;
+          triggerOverlayAd();
+        } else if (percentage >= 0.66 && percentage < 0.69 && !overlayTriggered.current.mid2) {
+          overlayTriggered.current.mid2 = true;
+          triggerOverlayAd();
+        }
+      }
     }
   };
 
@@ -630,6 +714,96 @@ export default function Watch() {
           </div>
         </div>
       </div>
+
+      {/* OVERLAY AD SYSTEM */}
+      {showOverlayAd && overlayAdCode && (
+        <div style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: '#0a0a0a',
+          zIndex: 100,
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}>
+          <style>{`
+            @keyframes spin {
+              0% { transform: rotate(0deg); }
+              100% { transform: rotate(360deg); }
+            }
+          `}</style>
+          
+          {/* Ad display area */}
+          <div className="ad-container-filled" style={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', position: 'relative' }}>
+            <AdPlacement placement="video_overlay" code={overlayAdCode} />
+          </div>
+
+          {/* Countdown & Close button overlay */}
+          <div style={{
+            position: 'absolute',
+            top: '12px',
+            right: '12px',
+            zIndex: 110,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px'
+          }}>
+            {countdown > 0 ? (
+              <div style={{
+                backgroundColor: 'rgba(0, 0, 0, 0.85)',
+                color: '#fff',
+                padding: '6px 14px',
+                borderRadius: '20px',
+                fontSize: '13px',
+                fontWeight: '600',
+                border: '1px solid rgba(255, 255, 255, 0.25)',
+                backdropFilter: 'blur(4px)',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                <span style={{
+                  display: 'inline-block',
+                  width: '12px',
+                  height: '12px',
+                  border: '2px solid #fff',
+                  borderTop: '2px solid transparent',
+                  borderRadius: '50%',
+                  animation: 'spin 1s linear infinite'
+                }}></span>
+                Video plays in {countdown}s
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={handleCloseOverlayAd}
+                style={{
+                  backgroundColor: 'var(--primary, #ff0000)',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '4px',
+                  padding: '6px 16px',
+                  fontSize: '13px',
+                  fontWeight: '700',
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+                  transition: 'background-color 0.2s',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+                onMouseEnter={(e) => e.target.style.filter = 'brightness(1.1)'}
+                onMouseLeave={(e) => e.target.style.filter = 'none'}
+              >
+                Close Ad ✕
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 

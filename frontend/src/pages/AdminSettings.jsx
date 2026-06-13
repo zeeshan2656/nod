@@ -96,7 +96,7 @@ export default function AdminSettings() {
         return ad;
       }));
 
-      setToast({ message: `Ad placement [${editingAd.placement}] updated.`, type: 'success' });
+      setToast({ message: 'Advertisement updated successfully', type: 'success' });
       setEditingAd(null);
     } catch (err) {
       console.error('Failed to save ad placement:', err);
@@ -207,52 +207,136 @@ export default function AdminSettings() {
               </table>
             </div>
 
-            {/* Editing form for selected ad */}
-            {editingAd && (
-              <div style={{ marginTop: '10px', border: '1px solid var(--accent)', padding: '16px', background: 'rgba(33, 150, 243, 0.02)' }}>
-                <h3 style={{ fontSize: '14px', fontWeight: '700', marginBottom: '12px', color: 'var(--accent)' }}>
-                  Editing Ad Slot: {editingAd.name} ({editingAd.placement})
-                </h3>
-                <form onSubmit={handleSaveAd}>
-                  <div className="form-group">
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', marginBottom: '12px' }}>
-                      <input
-                        type="checkbox"
-                        checked={editingAdActive}
-                        onChange={(e) => setEditingAdActive(e.target.checked)}
-                      />
-                      Enable ad placement (Make Active)
-                    </label>
-                  </div>
-
-                  <div className="form-group">
-                    <label className="form-label">Ad Integration Code (HTML, JS, Google AdSense, etc.)</label>
-                    <textarea
-                      className="form-input"
-                      style={{ minHeight: '150px', fontFamily: 'monospace', fontSize: '12px', resize: 'vertical' }}
-                      value={editingAdCode}
-                      onChange={(e) => setEditingAdCode(e.target.value)}
-                      placeholder="<!-- Paste Google AdSense script, script tag, or custom HTML/iframe banner codes here -->"
-                      required
-                    />
-                  </div>
-
-                  <div style={{ display: 'flex', gap: '10px' }}>
-                    <button type="submit" className="btn btn-primary" style={{ padding: '8px 16px', fontSize: '13px' }} disabled={savingAd}>
-                      {savingAd ? 'Saving Placement...' : 'Save Ad Slot'}
-                    </button>
-                    <button type="button" className="btn btn-secondary" style={{ padding: '8px 16px', fontSize: '13px' }} onClick={() => setEditingAd(null)}>
-                      Cancel
-                    </button>
-                  </div>
-                </form>
-              </div>
-            )}
-
           </div>
         </div>
 
       </div>
+
+      {/* Edit Ad Modal Popup */}
+      {editingAd && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.75)',
+          backdropFilter: 'blur(4px)',
+          zIndex: 10000,
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          padding: '16px',
+        }} onClick={() => setEditingAd(null)}>
+          <div style={{
+            backgroundColor: 'var(--card-bg)',
+            border: '1px solid var(--border-color)',
+            borderRadius: '4px',
+            width: '100%',
+            maxWidth: '600px',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+          }} onClick={(e) => e.stopPropagation()}>
+            
+            {/* Modal Header */}
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '16px',
+              borderBottom: '1px solid var(--border-color)',
+            }}>
+              <h3 style={{ fontSize: '15px', fontWeight: '700', margin: 0, color: '#fff' }}>
+                Edit Advertisement
+              </h3>
+              <button
+                type="button"
+                onClick={() => setEditingAd(null)}
+                style={{ fontSize: '18px', color: 'var(--text-muted)', cursor: 'pointer' }}
+                onMouseEnter={(e) => e.target.style.color = '#fff'}
+                onMouseLeave={(e) => e.target.style.color = 'var(--text-muted)'}
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Modal Body / Form */}
+            <form onSubmit={handleSaveAd} style={{ padding: '16px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Ad Name</label>
+                <input
+                  type="text"
+                  className="form-input"
+                  value={editingAd.name}
+                  disabled
+                  style={{ opacity: 0.6, cursor: 'not-allowed' }}
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label className="form-label">Ad Code</label>
+                <textarea
+                  className="form-input"
+                  style={{
+                    minHeight: '220px',
+                    fontFamily: 'monospace',
+                    fontSize: '12px',
+                    resize: 'vertical',
+                    backgroundColor: '#0a0a0a',
+                    border: '1px solid var(--border-color)',
+                  }}
+                  value={editingAdCode}
+                  onChange={(e) => setEditingAdCode(e.target.value)}
+                  placeholder="<!-- Paste Google AdSense script, script tag, or custom HTML/iframe banner codes here -->"
+                  required
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', userSelect: 'none' }}>
+                  <input
+                    type="checkbox"
+                    checked={editingAdActive}
+                    onChange={(e) => setEditingAdActive(e.target.checked)}
+                    style={{ width: '16px', height: '16px', accentColor: 'var(--primary)' }}
+                  />
+                  <span>Active</span>
+                </label>
+              </div>
+
+              {/* Modal Footer / Actions */}
+              <div style={{
+                display: 'flex',
+                justifyContent: 'flex-end',
+                gap: '10px',
+                borderTop: '1px solid var(--border-color)',
+                paddingTop: '16px',
+                marginTop: '8px',
+              }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ padding: '8px 16px', fontSize: '13px' }}
+                  onClick={() => setEditingAd(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  style={{ padding: '8px 16px', fontSize: '13px', minWidth: '120px' }}
+                  disabled={savingAd}
+                >
+                  {savingAd ? 'Saving Changes...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 }

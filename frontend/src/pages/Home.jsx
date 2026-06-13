@@ -185,11 +185,6 @@ export default function Home() {
           {renderPagination()}
         </div>
       )}
-
-      {/* Footer Ad Slot */}
-      <div style={{ padding: '0 16px' }}>
-        <AdPlacement placement="footer" />
-      </div>
     </div>
   );
 }
