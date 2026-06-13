@@ -868,13 +868,19 @@ main.main-reels {
 
 /* Enforce ad content styling to contain any custom banner images/iframes */
 .video-card.ad-card img,
-.video-card.ad-card iframe,
 .video-card.ad-card a img,
 .video-card.ad-card div img {
   max-width: 100% !important;
   max-height: 100% !important;
   width: auto !important;
   height: auto !important;
+  object-fit: contain !important;
+  display: block;
+}
+
+.video-card.ad-card iframe {
+  max-width: 100% !important;
+  max-height: 100% !important;
   object-fit: contain !important;
   display: block;
 }

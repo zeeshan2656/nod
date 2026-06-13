@@ -63,6 +63,9 @@ async function initializeDatabase() {
         [placement, name, code, is_active]
       );
     }
+
+    // Always clean up the legacy between_cards placement if it exists
+    await db.query("DELETE FROM ads WHERE placement = 'between_cards'");
   } catch (err) {
     console.error('[Database] Failed to auto-initialize database:', err.message);
   }

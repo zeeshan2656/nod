@@ -78,7 +78,7 @@ CREATE TABLE IF NOT EXISTS comments (
 -- 6. Ad Placements table
 CREATE TABLE IF NOT EXISTS ads (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    placement VARCHAR(50) NOT NULL UNIQUE, -- 'header', 'footer', 'sidebar', 'video_top', 'video_bottom', 'between_cards', 'reel_feed', 'watch_page'
+    placement VARCHAR(50) NOT NULL UNIQUE, -- 'header', 'footer', 'sidebar', 'video_top', 'video_bottom', 'reel_feed', 'watch_page', 'landing_row_1', 'landing_row_2', 'landing_row_3', 'landing_row_4', 'landing_row_5'
     name VARCHAR(100) NOT NULL,
     code TEXT NOT NULL,
     is_active TINYINT DEFAULT 1,
@@ -99,7 +99,6 @@ INSERT INTO ads (placement, name, code, is_active) VALUES
 ('sidebar', 'Sidebar Ad Placement', '<!-- Sidebar Ad Placement Placeholder -->', 0),
 ('video_top', 'Video Top Ad Placement', '<!-- Video Top Ad Placement Placeholder -->', 0),
 ('video_bottom', 'Video Bottom Ad Placement', '<!-- Video Bottom Ad Placement Placeholder -->', 0),
-('between_cards', 'Between Cards Ad Placement', '<!-- Between Cards Ad Placement Placeholder -->', 0),
 ('reel_feed', 'Reel Feed Ad Placement', '<!-- Reel Feed Ad Placement Placeholder -->', 0),
 ('watch_page', 'Watch Page Ad Placement', '<!-- Watch Page Ad Placement Placeholder -->', 0),
 ('landing_row_1', 'Landing Page Row 1 Ad', '<!-- Landing Page Row 1 Ad Placeholder -->', 0),

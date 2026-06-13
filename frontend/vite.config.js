@@ -5,6 +5,8 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   build: {
+    outDir: '../backend/public',
+    emptyOutDir: true,
     rollupOptions: {
       output: {
         // Advanced manual code splitting to reduce initial JS load for better PageSpeed performance

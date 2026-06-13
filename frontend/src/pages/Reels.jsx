@@ -436,9 +436,6 @@ export default function Reels() {
               data-index={item.index}
               style={{ display: 'flex', flexDirection: 'column', padding: '20px', justifyContent: 'center' }}
             >
-              <h3 style={{ marginBottom: '16px', color: 'var(--text-muted)', fontSize: '14px', textAlign: 'center' }}>
-                SPONSORED ADVERTISEMENT
-              </h3>
               <AdPlacement placement="reel_feed" />
             </div>
           );

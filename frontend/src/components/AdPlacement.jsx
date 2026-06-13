@@ -1,9 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import api from '../utils/api';
 
 export default function AdPlacement({ placement, type, code }) {
   const [adCode, setAdCode] = useState(code || null);
-  const containerRef = useRef(null);
 
   useEffect(() => {
     if (code !== undefined) {
@@ -26,22 +25,22 @@ export default function AdPlacement({ placement, type, code }) {
     fetchAds();
   }, [placement, code]);
 
-  useEffect(() => {
-    if (adCode && containerRef.current) {
-      // Clear previous container content
-      containerRef.current.innerHTML = '';
-      
-      // Use Contextual Fragment to force rendering & execution of embedded JS <script> tags (like Google AdSense)
+  const handleRef = (el) => {
+    if (el && adCode) {
+      if (el._lastInjectedCode === adCode) return;
+      el.innerHTML = '';
       try {
         const range = document.createRange();
         const fragment = range.createContextualFragment(adCode);
-        containerRef.current.appendChild(fragment);
+        el.appendChild(fragment);
+        el._lastInjectedCode = adCode;
       } catch (err) {
         console.error(`Failed executing scripts for ad placement [${placement}]:`, err);
-        containerRef.current.innerHTML = adCode; // Fallback to raw injection
+        el.innerHTML = adCode;
+        el._lastInjectedCode = adCode;
       }
     }
-  }, [adCode]);
+  };
 
   if (!adCode) {
     return null;
@@ -49,7 +48,7 @@ export default function AdPlacement({ placement, type, code }) {
 
   return (
     <div className="ad-container-filled" style={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-      <div ref={containerRef} style={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }} />
+      <div ref={handleRef} style={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }} />
     </div>
   );
 }
