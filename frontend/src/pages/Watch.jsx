@@ -33,6 +33,7 @@ export default function Watch() {
   const [showOverlayAd, setShowOverlayAd] = useState(false);
   const [countdown, setCountdown] = useState(15);
   const [overlayAdCode, setOverlayAdCode] = useState(null);
+  const [adLoading, setAdLoading] = useState(false);
   const overlayTriggered = useRef({ pre: false, mid1: false, mid2: false });
   const showOverlayAdRef = useRef(false);
 
@@ -105,11 +106,13 @@ export default function Watch() {
         if (activeAds && activeAds['video_overlay']) {
           setOverlayAdCode(activeAds['video_overlay']);
           setShowOverlayAd(true);
+          setAdLoading(true);
           setCountdown(15);
           overlayTriggered.current = { pre: true, mid1: false, mid2: false };
         } else {
           setOverlayAdCode(null);
           setShowOverlayAd(false);
+          setAdLoading(false);
           overlayTriggered.current = { pre: false, mid1: false, mid2: false };
         }
       } catch (err) {
@@ -146,6 +149,7 @@ export default function Watch() {
   // Countdown timer for overlay ad
   useEffect(() => {
     if (!showOverlayAd) return;
+    if (adLoading) return;
     if (countdown <= 0) return;
 
     const timer = setInterval(() => {
@@ -153,7 +157,7 @@ export default function Watch() {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [showOverlayAd, countdown]);
+  }, [showOverlayAd, countdown, adLoading]);
 
   const triggerOverlayAd = () => {
     if (!overlayAdCode) return;
@@ -162,6 +166,7 @@ export default function Watch() {
     }
     setIsPlaying(false);
     setCountdown(15);
+    setAdLoading(true);
     setShowOverlayAd(true);
   };
 
@@ -578,6 +583,7 @@ export default function Watch() {
         ref={videoRef}
         className="player-element"
         playsInline
+        preload="auto"
         onPlay={handlePlay}
         onPause={() => setIsPlaying(false)}
         onTimeUpdate={handleTimeUpdate}
@@ -737,71 +743,124 @@ export default function Watch() {
           `}</style>
           
           {/* Ad display area */}
-          <div className="ad-container-filled" style={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', position: 'relative' }}>
-            <AdPlacement placement="video_overlay" code={overlayAdCode} />
+          <div className="ad-container-filled" style={{
+            width: '100%',
+            height: '100%',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            position: 'relative',
+            opacity: adLoading ? 0 : 1,
+            transition: 'opacity 0.3s ease-in-out'
+          }}>
+            <AdPlacement
+              placement="video_overlay"
+              code={overlayAdCode}
+              onAdLoaded={() => setAdLoading(false)}
+              onAdFailed={() => {
+                console.warn('Overlay ad failed to load. Skipping gracefully to playback.');
+                setAdLoading(false);
+                setShowOverlayAd(false);
+                if (videoRef.current) {
+                  videoRef.current.play().catch(err => console.warn('Play failed after ad error:', err));
+                  setIsPlaying(true);
+                }
+              }}
+            />
           </div>
 
+          {/* Loading state spinner centered */}
+          {adLoading && (
+            <div style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: '#0a0a0a',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+              alignItems: 'center',
+              zIndex: 105
+            }}>
+              <span className="overlay-ad-spinner" style={{
+                display: 'inline-block',
+                width: '40px',
+                height: '40px',
+                border: '3px solid rgba(255, 255, 255, 0.1)',
+                borderTop: '3px solid #fff',
+                borderRadius: '50%',
+                animation: 'spin 1s linear infinite',
+                marginBottom: '12px'
+              }}></span>
+              <span style={{ color: '#fff', fontSize: '14px', fontWeight: '500', letterSpacing: '0.5px' }}>Loading...</span>
+            </div>
+          )}
+
           {/* Countdown & Close button overlay */}
-          <div style={{
-            position: 'absolute',
-            top: '12px',
-            right: '12px',
-            zIndex: 110,
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px'
-          }}>
-            {countdown > 0 ? (
-              <div style={{
-                backgroundColor: 'rgba(0, 0, 0, 0.85)',
-                color: '#fff',
-                padding: '6px 14px',
-                borderRadius: '20px',
-                fontSize: '13px',
-                fontWeight: '600',
-                border: '1px solid rgba(255, 255, 255, 0.25)',
-                backdropFilter: 'blur(4px)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px'
-              }}>
-                <span style={{
-                  display: 'inline-block',
-                  width: '12px',
-                  height: '12px',
-                  border: '2px solid #fff',
-                  borderTop: '2px solid transparent',
-                  borderRadius: '50%',
-                  animation: 'spin 1s linear infinite'
-                }}></span>
-                Video plays in {countdown}s
-              </div>
-            ) : (
-              <button
-                type="button"
-                onClick={handleCloseOverlayAd}
-                style={{
-                  backgroundColor: 'var(--primary, #ff0000)',
+          {!adLoading && (
+            <div style={{
+              position: 'absolute',
+              top: '12px',
+              right: '12px',
+              zIndex: 110,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '10px'
+            }}>
+              {countdown > 0 ? (
+                <div style={{
+                  backgroundColor: 'rgba(0, 0, 0, 0.85)',
                   color: '#fff',
-                  border: 'none',
-                  borderRadius: '4px',
-                  padding: '6px 16px',
+                  padding: '6px 14px',
+                  borderRadius: '20px',
                   fontSize: '13px',
-                  fontWeight: '700',
-                  cursor: 'pointer',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
-                  transition: 'background-color 0.2s',
+                  fontWeight: '600',
+                  border: '1px solid rgba(255, 255, 255, 0.25)',
+                  backdropFilter: 'blur(4px)',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '4px'
-                }}
-                onMouseEnter={(e) => e.target.style.filter = 'brightness(1.1)'}
-                onMouseLeave={(e) => e.target.style.filter = 'none'}
-              >
-                Close Ad ✕
-              </button>
-            )}
-          </div>
+                  gap: '8px'
+                }}>
+                  <span style={{
+                    display: 'inline-block',
+                    width: '12px',
+                    height: '12px',
+                    border: '2px solid #fff',
+                    borderTop: '2px solid transparent',
+                    borderRadius: '50%',
+                    animation: 'spin 1s linear infinite'
+                  }}></span>
+                  Video plays in {countdown}s
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={handleCloseOverlayAd}
+                  style={{
+                    backgroundColor: 'var(--primary, #ff0000)',
+                    color: '#fff',
+                    border: 'none',
+                    borderRadius: '4px',
+                    padding: '6px 16px',
+                    fontSize: '13px',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.4)',
+                    transition: 'background-color 0.2s',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                  onMouseEnter={(e) => e.target.style.filter = 'brightness(1.1)'}
+                  onMouseLeave={(e) => e.target.style.filter = 'none'}
+                >
+                  Close Ad ✕
+                </button>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>

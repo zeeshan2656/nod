@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import api from '../utils/api';
 
-export default function AdPlacement({ placement, type, code }) {
+export default function AdPlacement({ placement, type, code, onAdLoaded, onAdFailed }) {
   const [adCode, setAdCode] = useState(code || null);
 
   useEffect(() => {
@@ -31,6 +31,41 @@ export default function AdPlacement({ placement, type, code }) {
     el._lastInjectedCode = adCode;
 
     el.innerHTML = '';
+    
+    // Set up tracking
+    let scriptsToLoad = [];
+    let scriptsLoadedCount = 0;
+    let scriptsFailedCount = 0;
+    let resolved = false;
+
+    // Fail-safe timeout (3 seconds)
+    const loadTimeout = setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        console.warn(`Ad placement [${placement}] load timed out.`);
+        if (onAdLoaded) onAdLoaded();
+      }
+    }, 3000);
+
+    const checkCompletion = () => {
+      if (resolved) return;
+      
+      const totalScripts = scriptsToLoad.length;
+      if (scriptsLoadedCount + scriptsFailedCount >= totalScripts) {
+        resolved = true;
+        clearTimeout(loadTimeout);
+        
+        if (scriptsFailedCount === totalScripts && totalScripts > 0) {
+          // If all scripts failed (e.g. ad blocked)
+          console.error(`Ad placement [${placement}] all scripts failed to load.`);
+          if (onAdFailed) onAdFailed();
+        } else {
+          // If at least some scripts loaded successfully, or there were no scripts
+          if (onAdLoaded) onAdLoaded();
+        }
+      }
+    };
+
     try {
       // Parse adCode into DOM nodes using a temporary container
       const tempDiv = document.createElement('div');
@@ -50,6 +85,21 @@ export default function AdPlacement({ placement, type, code }) {
         el.appendChild(tempDiv.firstChild);
       }
 
+      // Filter external scripts that need loading
+      scriptsToInject.forEach((script) => {
+        if (script.getAttribute('src')) {
+          scriptsToLoad.push(script);
+        }
+      });
+
+      if (scriptsToInject.length === 0) {
+        // No scripts to run at all
+        resolved = true;
+        clearTimeout(loadTimeout);
+        if (onAdLoaded) onAdLoaded();
+        return;
+      }
+
       // Programmatically create and load each script
       scriptsToInject.forEach((oldScript) => {
         const newScript = document.createElement('script');
@@ -64,9 +114,22 @@ export default function AdPlacement({ placement, type, code }) {
           newScript.setAttribute(attr.name, val);
         });
 
-        // Clear any global window states set by this ad key (e.g. Adsterra keys)
+        // Copy inline script content
+        newScript.textContent = oldScript.textContent;
+
         const srcAttr = oldScript.getAttribute('src');
         if (srcAttr) {
+          // External script
+          newScript.onload = () => {
+            scriptsLoadedCount++;
+            checkCompletion();
+          };
+          newScript.onerror = () => {
+            scriptsFailedCount++;
+            checkCompletion();
+          };
+
+          // Clear any global window states set by this ad key (e.g. Adsterra keys)
           const match = srcAttr.match(/\/([a-f0-9]{32})\//i);
           if (match && match[1]) {
             const key = match[1];
@@ -78,15 +141,19 @@ export default function AdPlacement({ placement, type, code }) {
           }
         }
 
-        // Copy inline script content
-        newScript.textContent = oldScript.textContent;
-
         // Append script to run it
         el.appendChild(newScript);
+
+        if (!srcAttr) {
+          // Inline scripts execute synchronously upon insertion
+          checkCompletion();
+        }
       });
     } catch (err) {
       console.error(`Failed executing scripts for ad placement [${placement}]:`, err);
-      el.innerHTML = adCode;
+      resolved = true;
+      clearTimeout(loadTimeout);
+      if (onAdFailed) onAdFailed();
     }
   };
 
