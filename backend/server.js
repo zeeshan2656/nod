@@ -76,9 +76,30 @@ app.use('/api/comments', commentRoutes);
 app.use('/api/ads', adRoutes);
 app.use('/api/settings', settingRoutes);
 
-// Base health check endpoint
-app.get('/health', (req, res) => {
-  res.json({ status: 'healthy', time: new Date() });
+// Base health check endpoint (performs db sanity checks for production diagnostics)
+const db = require('./config/db');
+app.get('/health', async (req, res) => {
+  try {
+    await db.query('SELECT 1');
+    res.json({ 
+      status: 'healthy', 
+      database: 'connected', 
+      time: new Date() 
+    });
+  } catch (dbErr) {
+    res.status(500).json({ 
+      status: 'unhealthy', 
+      database: 'disconnected', 
+      error: dbErr.message, 
+      config: {
+        host: process.env.DB_HOST || 'localhost',
+        user: process.env.DB_USER,
+        database: process.env.DB_NAME,
+        port: process.env.DB_PORT || 3306
+      },
+      time: new Date() 
+    });
+  }
 });
 
 // Serve static React frontend files from 'public' directory (cPanel single-domain deployment)
