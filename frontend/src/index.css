@@ -217,6 +217,25 @@ main.main-reels {
   border-bottom: 1px solid var(--border-color);
   width: 100%;
   overflow: hidden;
+  height: 300px; /* Mobile layout height default */
+}
+
+@media (min-width: 600px) {
+  .video-card {
+    height: 260px; /* Tablet / Small screen grid card height */
+  }
+}
+
+@media (min-width: 900px) {
+  .video-card {
+    height: 250px;
+  }
+}
+
+@media (min-width: 1200px) {
+  .video-card {
+    height: 230px; /* Desktop 5-column grid card height */
+  }
 }
 
 .video-thumbnail-container {
@@ -532,20 +551,11 @@ main.main-reels {
   display: flex;
   justify-content: center;
   align-items: center;
-  background-color: var(--card-bg);
-  border: 1px dashed var(--border-color);
-  padding: 8px;
   width: 100%;
-  text-align: center;
   overflow: hidden;
-  margin: 10px 0;
 }
 .ad-label {
-  display: block;
-  font-size: 9px;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  margin-bottom: 4px;
+  display: none !important; /* Hide labels globally */
 }
 
 /* Admin Panels (Dashboard, Settings, Upload) */
@@ -826,31 +836,56 @@ main.main-reels {
 .video-card.ad-card {
   background-color: var(--card-bg);
   border: 1px dashed var(--border-color);
-  border-bottom: 1px dashed var(--border-color);
-  padding: 16px;
+  padding: 0; /* Remove padding so ad content fits fully */
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
   text-align: center;
   box-sizing: border-box;
-  height: 100%;
-  min-height: 220px;
   position: relative;
   overflow: hidden;
+  height: 300px; /* Mobile height matching video-card */
 }
 
-.video-card.ad-card .ad-container {
-  border: none;
-  background: transparent;
-  padding: 0;
-  margin: 0;
+@media (min-width: 600px) {
+  .video-card.ad-card {
+    height: 260px;
+  }
+}
+
+@media (min-width: 900px) {
+  .video-card.ad-card {
+    height: 250px;
+  }
+}
+
+@media (min-width: 1200px) {
+  .video-card.ad-card {
+    height: 230px; /* Desktop height matching video-card */
+  }
+}
+
+/* Enforce ad content styling to contain any custom banner images/iframes */
+.video-card.ad-card img,
+.video-card.ad-card iframe,
+.video-card.ad-card a img,
+.video-card.ad-card div img {
+  max-width: 100% !important;
+  max-height: 100% !important;
+  width: auto !important;
+  height: auto !important;
+  object-fit: contain !important;
+  display: block;
+}
+
+.video-card.ad-card .ad-container-filled {
   width: 100%;
   height: 100%;
   display: flex;
-  flex-direction: column;
   justify-content: center;
   align-items: center;
+  overflow: hidden;
 }
 
 /* Desktop and Mobile Expanded Search styling */

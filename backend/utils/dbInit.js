@@ -6,12 +6,14 @@ async function initializeDatabase() {
   try {
     // Check if the 'users' table exists to determine if we need initialization
     const [rows] = await db.query("SHOW TABLES LIKE 'users'");
+    let initialized = false;
     if (rows.length > 0) {
       console.log('[Database] Tables already initialized.');
-      return;
+      initialized = true;
     }
 
-    console.log('[Database] Tables not found. Auto-initializing database from schema.sql...');
+    if (!initialized) {
+      console.log('[Database] Tables not found. Auto-initializing database from schema.sql...');
     const schemaPath = path.join(__dirname, '..', 'db', 'schema.sql');
     if (!fs.existsSync(schemaPath)) {
       console.warn('[Database] schema.sql file not found at:', schemaPath);
@@ -41,7 +43,26 @@ async function initializeDatabase() {
         console.error('[Database] Failed to execute statement:', statement, '\nError:', stmtErr.message);
       }
     }
-    console.log('[Database] Database tables initialized successfully!');
+      console.log('[Database] Database tables initialized successfully!');
+    }
+
+    // Always guarantee that landing page row ad slots are seeded
+    const landingAds = [
+      ['landing_row_1', 'Landing Page Row 1 Ad', '<!-- Landing Page Row 1 Ad Placeholder -->', 0],
+      ['landing_row_2', 'Landing Page Row 2 Ad', '<!-- Landing Page Row 2 Ad Placeholder -->', 0],
+      ['landing_row_3', 'Landing Page Row 3 Ad', '<!-- Landing Page Row 3 Ad Placeholder -->', 0],
+      ['landing_row_4', 'Landing Page Row 4 Ad', '<!-- Landing Page Row 4 Ad Placeholder -->', 0],
+      ['landing_row_5', 'Landing Page Row 5 Ad', '<!-- Landing Page Row 5 Ad Placeholder -->', 0]
+    ];
+
+    for (const [placement, name, code, is_active] of landingAds) {
+      await db.query(
+        `INSERT INTO ads (placement, name, code, is_active) 
+         VALUES (?, ?, ?, ?) 
+         ON DUPLICATE KEY UPDATE name = VALUES(name)`,
+        [placement, name, code, is_active]
+      );
+    }
   } catch (err) {
     console.error('[Database] Failed to auto-initialize database:', err.message);
   }

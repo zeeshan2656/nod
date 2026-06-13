@@ -101,7 +101,12 @@ INSERT INTO ads (placement, name, code, is_active) VALUES
 ('video_bottom', 'Video Bottom Ad Placement', '<!-- Video Bottom Ad Placement Placeholder -->', 0),
 ('between_cards', 'Between Cards Ad Placement', '<!-- Between Cards Ad Placement Placeholder -->', 0),
 ('reel_feed', 'Reel Feed Ad Placement', '<!-- Reel Feed Ad Placement Placeholder -->', 0),
-('watch_page', 'Watch Page Ad Placement', '<!-- Watch Page Ad Placement Placeholder -->', 0)
+('watch_page', 'Watch Page Ad Placement', '<!-- Watch Page Ad Placement Placeholder -->', 0),
+('landing_row_1', 'Landing Page Row 1 Ad', '<!-- Landing Page Row 1 Ad Placeholder -->', 0),
+('landing_row_2', 'Landing Page Row 2 Ad', '<!-- Landing Page Row 2 Ad Placeholder -->', 0),
+('landing_row_3', 'Landing Page Row 3 Ad', '<!-- Landing Page Row 3 Ad Placeholder -->', 0),
+('landing_row_4', 'Landing Page Row 4 Ad', '<!-- Landing Page Row 4 Ad Placeholder -->', 0),
+('landing_row_5', 'Landing Page Row 5 Ad', '<!-- Landing Page Row 5 Ad Placeholder -->', 0)
 ON DUPLICATE KEY UPDATE updated_at = CURRENT_TIMESTAMP;
 
 -- Seed default settings

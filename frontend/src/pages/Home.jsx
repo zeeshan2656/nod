@@ -7,11 +7,25 @@ export default function Home() {
   const [videos, setVideos] = useState([]);
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [activeAds, setActiveAds] = useState({});
   const [searchParams] = useSearchParams();
 
   const page = parseInt(searchParams.get('page')) || 1;
   const searchQuery = searchParams.get('search') || '';
   const limit = 20;
+
+  // Load active ads once on mount
+  useEffect(() => {
+    const fetchActiveAds = async () => {
+      try {
+        const response = await api.get('/ads');
+        setActiveAds(response.data || {});
+      } catch (err) {
+        console.error('Error fetching active ads:', err);
+      }
+    };
+    fetchActiveAds();
+  }, []);
 
   // Load videos when page or searchQuery changes
   useEffect(() => {
@@ -56,7 +70,12 @@ export default function Home() {
     gridItems.push({ type: 'video', data: videos[i] });
     videoCount++;
     if (videoCount > 0 && videoCount % 4 === 0) {
-      gridItems.push({ type: 'ad', key: `ad-${videoCount / 4}-${page}` });
+      const adIndex = videoCount / 4; // 1, 2, 3, 4, 5
+      const placement = `landing_row_${adIndex}`;
+      // Only inject the ad card if the ad is active and has code
+      if (activeAds && activeAds[placement]) {
+        gridItems.push({ type: 'ad', placement, key: `ad-${adIndex}-${page}` });
+      }
     }
   }
 
@@ -131,7 +150,7 @@ export default function Home() {
               if (item.type === 'ad') {
                 return (
                   <div key={item.key} className="video-card ad-card">
-                    <AdPlacement placement="between_cards" type="card" />
+                    <AdPlacement placement={item.placement} type="card" code={activeAds[item.placement]} />
                   </div>
                 );
               }

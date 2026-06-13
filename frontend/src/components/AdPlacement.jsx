@@ -1,24 +1,30 @@
 import React, { useEffect, useRef, useState } from 'react';
 import api from '../utils/api';
 
-export default function AdPlacement({ placement, type }) {
-  const [adCode, setAdCode] = useState(null);
+export default function AdPlacement({ placement, type, code }) {
+  const [adCode, setAdCode] = useState(code || null);
   const containerRef = useRef(null);
 
   useEffect(() => {
+    if (code !== undefined) {
+      setAdCode(code);
+      return;
+    }
     const fetchAds = async () => {
       try {
         const response = await api.get('/ads');
         const activeAds = response.data;
         if (activeAds && activeAds[placement]) {
           setAdCode(activeAds[placement]);
+        } else {
+          setAdCode(null);
         }
       } catch (err) {
         console.error(`Error loading ad placement [${placement}]:`, err);
       }
     };
     fetchAds();
-  }, [placement]);
+  }, [placement, code]);
 
   useEffect(() => {
     if (adCode && containerRef.current) {
@@ -38,21 +44,12 @@ export default function AdPlacement({ placement, type }) {
   }, [adCode]);
 
   if (!adCode) {
-    if (type === 'card') {
-      return (
-        <div className="ad-card-placeholder" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', height: '100%', width: '100%', gap: '8px' }}>
-          <span className="ad-label" style={{ fontSize: '9px', textTransform: 'uppercase', color: 'var(--text-muted)', letterSpacing: '1px' }}>Advertisement</span>
-          <div style={{ color: '#444', fontSize: '12px', fontWeight: '500' }}>Ad Partner Slot</div>
-        </div>
-      );
-    }
     return null;
   }
 
   return (
-    <div className="ad-container">
-      <span className="ad-label">Advertisement</span>
-      <div ref={containerRef} style={{ width: '100%' }} />
+    <div className="ad-container-filled" style={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+      <div ref={containerRef} style={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }} />
     </div>
   );
 }
