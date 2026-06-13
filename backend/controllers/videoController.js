@@ -371,6 +371,7 @@ exports.getTemporaryThumbnails = async (req, res) => {
       const ffmpegArgs = [
         '-ss', timestamp.toFixed(3),
         '-i', sourcePath,
+        '-threads', '2',
         '-vframes', '1',
         '-vf', 'scale=320:-1',
         '-f', 'image2',

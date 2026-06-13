@@ -114,6 +114,7 @@ function extractFrameToBuffer(filePath, timestamp) {
     const ffmpegProcess = spawn(ffmpegPath, [
       '-ss', timestamp.toFixed(3),
       '-i', filePath,
+      '-threads', '2',
       '-vframes', '1',
       '-vf', 'scale=640:-1',
       '-f', 'image2',
@@ -212,8 +213,10 @@ async function transcodeToHLS(inputPath, outputDir, height) {
     const args = [
       '-y',
       '-i', inputPath,
+      '-threads', '2',
       '-vf', `scale=-2:${profile.height}`, // Scale, maintaining aspect ratio divisible by 2
       '-c:v', 'libx264',
+      '-pix_fmt', 'yuv420p',
       '-preset', 'veryfast', // Fast transcoding
       '-b:v', profile.bitrate,
       '-maxrate', profile.maxrate,
