@@ -169,6 +169,25 @@ function ReelItem({ reel, isActive, shouldPreload, isMuted, setIsMuted }) {
     <div className="reel-card" style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden' }}>
       {toast && <Toast message={toast} onClose={() => setToast('')} />}
       
+      {/* Reels Top Overlay Ad (Only mounted and loaded for the active reel, refreshes on swipe) */}
+      {isActive && (
+        <div className="reels-top-ad-wrapper" style={{
+          position: 'absolute',
+          top: '60px',
+          left: '16px',
+          right: '16px',
+          height: '60px',
+          zIndex: 100,
+          pointerEvents: 'auto',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          overflow: 'hidden'
+        }}>
+          <AdPlacement placement="reels_top_overlay" />
+        </div>
+      )}
+
       <div className="reel-video-container" onClick={handleToggleMute} style={{ width: '100%', height: '100%', cursor: 'pointer' }}>
         <video
           ref={videoRef}

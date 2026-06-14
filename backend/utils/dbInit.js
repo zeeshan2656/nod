@@ -57,7 +57,8 @@ async function initializeDatabase() {
       ['watch_page_mobile', 'Watch Page Mobile Ad', '<!-- Watch Page Mobile Ad Placeholder -->', 0],
       ['footer_desktop', 'Footer Desktop Ad', '<!-- Footer Desktop Ad Placeholder -->', 0],
       ['footer_mobile', 'Footer Mobile Ad', '<!-- Footer Mobile Ad Placeholder -->', 0],
-      ['video_overlay', 'Video Overlay Ad', '<!-- Video Overlay Ad Placeholder -->', 0]
+      ['video_overlay', 'Video Overlay Ad', '<!-- Video Overlay Ad Placeholder -->', 0],
+      ['reels_top_overlay', 'Reels Top Overlay Ad', '<!-- Reels Top Overlay Ad Placeholder -->', 0]
     ];
 
     for (const [placement, name, code, is_active] of adPlacementsToSeed) {

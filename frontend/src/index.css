@@ -442,6 +442,7 @@ main.main-reels {
 /* Reels Mobile Snap Container */
 .reels-feed-container {
   height: calc(100vh - var(--header-height));
+  height: calc(100dvh - var(--header-height));
   width: 100%;
   overflow-y: scroll;
   scroll-snap-type: y mandatory;
@@ -456,6 +457,7 @@ main.main-reels {
 /* Reel Item Wrapper - One Per Viewport */
 .reel-item-wrapper {
   height: calc(100vh - var(--header-height));
+  height: calc(100dvh - var(--header-height));
   width: 100%;
   scroll-snap-align: start;
   scroll-snap-stop: always;
@@ -541,11 +543,7 @@ main.main-reels {
   pointer-events: auto;
 }
 
-@media (max-width: 600px) {
-  .reel-video {
-    object-fit: cover !important;
-  }
-}
+
 
 .reel-action-circle {
   width: 45px;
@@ -790,10 +788,12 @@ main.main-reels {
 /* Full screen reels style overrides */
 .main-reels .reels-feed-container {
   height: 100vh !important;
+  height: 100dvh !important;
 }
 
 .main-reels .reel-item-wrapper {
   height: 100vh !important;
+  height: 100dvh !important;
 }
 
 /* Slide up animation */
@@ -990,6 +990,24 @@ main.main-reels {
     display: block;
   }
 
+  .mobile-menu-toggle {
+    display: flex !important;
+  }
+
+  .mobile-reels-trigger {
+    display: block !important;
+    font-size: 18px;
+    padding: 6px 12px;
+  }
+
+  /* Hide standard header links in mobile header */
+  .nav-links a:not(.mobile-reels-trigger) {
+    display: none !important;
+  }
+  .nav-links button:not(.mobile-search-trigger) {
+    display: none !important;
+  }
+
   /* Hide logo and nav links on mobile when search is expanded */
   .logo.mobile-hidden {
     display: none !important;
@@ -998,6 +1016,35 @@ main.main-reels {
   .nav-links.mobile-hidden {
     display: none !important;
   }
+
+  /* Video Grid Spacing = NO on mobile */
+  .video-grid {
+    gap: 0px !important;
+    padding: 0px !important;
+  }
+
+  .video-card {
+    border-bottom: 1px solid var(--border-color);
+    border-radius: 0;
+  }
+  .video-card.ad-card {
+    border: none;
+    border-bottom: 1px solid var(--border-color);
+  }
+}
+
+/* Sidebar nav item states */
+.sidebar-nav-item {
+  color: var(--text-muted, #aaa);
+  transition: background-color 0.2s, color 0.2s;
+}
+.sidebar-nav-item.active {
+  background-color: var(--border-color, #2f2f2f) !important;
+  color: #fff !important;
+}
+.sidebar-nav-item:hover {
+  background-color: rgba(255, 255, 255, 0.05);
+  color: #fff;
 }
 
 /* Footer Device-specific Ads visibility toggles */
