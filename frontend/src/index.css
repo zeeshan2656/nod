@@ -1079,3 +1079,7 @@ main.main-reels {
 
 /* Footer ads device visibility is now handled programmatically via AdPlacement.jsx */
 
+.reels-top-ad-wrapper,
+.reels-top-ad-wrapper > div {
+  height: auto !important;
+}
