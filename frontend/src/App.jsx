@@ -37,6 +37,13 @@ function AppLayout() {
     setSearchTerm(searchParams.get('search') || '');
   }, [searchParams]);
 
+  // Pre-fetch ad placements to accelerate layout rendering
+  useEffect(() => {
+    import('./components/AdPlacement').then(({ getCachedAds }) => {
+      getCachedAds().catch(() => {});
+    });
+  }, []);
+
   // Clean up debounce on unmount
   useEffect(() => {
     return () => {

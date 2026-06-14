@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useContext } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import api, { API_BASE_URL } from '../utils/api';
 import { AuthContext } from '../context/AuthContext';
-import AdPlacement from '../components/AdPlacement';
+import AdPlacement, { getCachedAds } from '../components/AdPlacement';
 import Toast from '../components/Toast';
 import Hls from 'hls.js';
 
@@ -34,6 +34,7 @@ export default function Watch() {
   const [countdown, setCountdown] = useState(15);
   const [overlayAdCode, setOverlayAdCode] = useState(null);
   const [adLoading, setAdLoading] = useState(false);
+  const [adVisible, setAdVisible] = useState(false);
   const overlayTriggered = useRef({ pre: false, mid1: false, mid2: false });
   const showOverlayAdRef = useRef(false);
 
@@ -43,12 +44,23 @@ export default function Watch() {
 
   // Custom Video Player States
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isBuffering, setIsBuffering] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
+  const [volume, setVolume] = useState(1);
   const [progress, setProgress] = useState(0);
   const [showControls, setShowControls] = useState(true);
   const [seekIndicator, setSeekIndicator] = useState(null); // 'rewind' or 'forward'
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
 
   // Refs
   const videoRef = useRef(null);
@@ -87,32 +99,33 @@ export default function Watch() {
       setLoading(true);
       try {
         // Fetch all data in parallel to avoid waterfalls and minimize load times
-        const [videoRes, relatedRes, adsRes] = await Promise.all([
+        const [videoRes, relatedRes, activeAds] = await Promise.all([
           api.get(`/videos/${id}`),
           api.get(`/videos/${id}/related`).catch(err => {
             console.error('Failed to load related videos:', err);
             return { data: [] };
           }),
-          api.get('/ads').catch(err => {
+          getCachedAds().catch(err => {
             console.error('Failed to load overlay ad:', err);
-            return { data: {} };
+            return {};
           })
         ]);
 
         setVideo(videoRes.data);
         setRelatedVideos(relatedRes.data || []);
 
-        const activeAds = adsRes.data || {};
         if (activeAds && activeAds['video_overlay']) {
           setOverlayAdCode(activeAds['video_overlay']);
           setShowOverlayAd(true);
           setAdLoading(true);
+          setAdVisible(false);
           setCountdown(15);
           overlayTriggered.current = { pre: true, mid1: false, mid2: false };
         } else {
           setOverlayAdCode(null);
           setShowOverlayAd(false);
           setAdLoading(false);
+          setAdVisible(false);
           overlayTriggered.current = { pre: false, mid1: false, mid2: false };
         }
       } catch (err) {
@@ -149,7 +162,7 @@ export default function Watch() {
   // Countdown timer for overlay ad
   useEffect(() => {
     if (!showOverlayAd) return;
-    if (adLoading) return;
+    if (adLoading || !adVisible) return;
     if (countdown <= 0) return;
 
     const timer = setInterval(() => {
@@ -157,7 +170,7 @@ export default function Watch() {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [showOverlayAd, countdown, adLoading]);
+  }, [showOverlayAd, countdown, adLoading, adVisible]);
 
   const triggerOverlayAd = () => {
     if (!overlayAdCode) return;
@@ -167,11 +180,13 @@ export default function Watch() {
     setIsPlaying(false);
     setCountdown(15);
     setAdLoading(true);
+    setAdVisible(false);
     setShowOverlayAd(true);
   };
 
   const handleCloseOverlayAd = () => {
     setShowOverlayAd(false);
+    setAdVisible(false);
     if (videoRef.current) {
       videoRef.current.play().catch(err => console.warn('Play failed after ad dismissal:', err));
       setIsPlaying(true);
@@ -282,13 +297,21 @@ export default function Watch() {
 
   const seekForward = () => {
     if (videoRef.current) {
+      const wasPlaying = !videoRef.current.paused;
       videoRef.current.currentTime = Math.min(videoRef.current.currentTime + 10, videoRef.current.duration || 0);
+      if (wasPlaying) {
+        videoRef.current.play().catch(err => console.warn('Play resume failed after seek:', err));
+      }
     }
   };
 
   const seekBackward = () => {
     if (videoRef.current) {
+      const wasPlaying = !videoRef.current.paused;
       videoRef.current.currentTime = Math.max(videoRef.current.currentTime - 10, 0);
+      if (wasPlaying) {
+        videoRef.current.play().catch(err => console.warn('Play resume failed after seek:', err));
+      }
     }
   };
 
@@ -575,6 +598,25 @@ export default function Watch() {
 
   const commentsCount = commentsFetched ? comments.length : (video.comments_count || 0);
 
+  const getPlayerState = () => {
+    if (isBuffering) return { label: 'Buffering', color: '#f57c00' };
+    if (videoRef.current?.ended || (currentTime >= duration && duration > 0)) return { label: 'Ended', color: '#1565c0' };
+    if (isPlaying) return { label: 'Playing', color: '#2e7d32' };
+    return { label: 'Paused', color: '#757575' };
+  };
+
+  const handleVolumeToggle = () => {
+    if (videoRef.current) {
+      const nextMute = !videoRef.current.muted;
+      videoRef.current.muted = nextMute;
+      setIsMuted(nextMute);
+      if (!nextMute && volume === 0) {
+        setVolume(0.5);
+        videoRef.current.volume = 0.5;
+      }
+    }
+  };
+
   const renderPlayer = () => (
     <div 
       ref={playerWrapperRef}
@@ -583,6 +625,22 @@ export default function Watch() {
       onMouseMove={handleMouseMove}
       onMouseLeave={() => isPlaying && setShowControls(false)}
     >
+      <style>{`
+        @keyframes player-spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+        .buffering-spinner {
+          display: inline-block;
+          width: 46px;
+          height: 46px;
+          border: 4px solid rgba(255, 255, 255, 0.1);
+          border-top: 4px solid #ffffff;
+          border-radius: 50%;
+          animation: player-spin 1s linear infinite;
+        }
+      `}</style>
+
       <video
         ref={videoRef}
         className="player-element"
@@ -593,6 +651,12 @@ export default function Watch() {
         onTimeUpdate={handleTimeUpdate}
         onDurationChange={handleDurationChange}
         onClick={handleVideoClick}
+        onWaiting={() => setIsBuffering(true)}
+        onPlaying={() => setIsBuffering(false)}
+        onSeeking={() => setIsBuffering(true)}
+        onSeeked={() => setIsBuffering(false)}
+        onCanPlay={() => setIsBuffering(false)}
+        onLoadStart={() => setIsBuffering(true)}
         style={{ cursor: 'pointer' }}
       />
 
@@ -630,10 +694,37 @@ export default function Watch() {
             e.currentTarget.style.transform = 'translate(-50%, -50%) scale(1)';
           }}
         >
-          {/* Unicode Pause Sign (Stop indicator) */}
-          <span style={{ fontSize: '24px', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>
-            ⏸️
-          </span>
+          {/* Dynamic Center Play / Stop SVG */}
+          {(videoRef.current?.ended || (currentTime >= duration && duration > 0)) ? (
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="#ffffff" style={{ display: 'block' }}>
+              <rect x="6" y="6" width="12" height="12" rx="1.5" />
+            </svg>
+          ) : (
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="#ffffff" style={{ marginLeft: '3px', display: 'block' }}>
+              <path d="M8 5v14l11-7z"/>
+            </svg>
+          )}
+        </div>
+      )}
+
+      {/* Centered Buffering Spinner */}
+      {isBuffering && !showOverlayAd && (
+        <div style={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          zIndex: 18,
+          pointerEvents: 'none',
+          backgroundColor: 'rgba(15, 15, 15, 0.65)',
+          padding: '12px',
+          borderRadius: '50%',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.5)'
+        }}>
+          <div className="buffering-spinner" />
         </div>
       )}
 
@@ -707,60 +798,144 @@ export default function Watch() {
             <button 
               type="button" 
               onClick={seekBackward} 
-              style={{ cursor: 'pointer', fontSize: '15px', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', padding: '4px' }}
               title="Rewind 10 seconds"
             >
-              ⏪
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M11 19l-7-7 7-7M20 19l-7-7 7-7" />
+              </svg>
             </button>
 
             {/* Play/Pause Button */}
             <button 
               type="button" 
               onClick={handlePlayPause} 
-              style={{ cursor: 'pointer', fontSize: '15px', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', padding: '4px' }}
+              title={isPlaying ? "Pause" : "Play"}
             >
-              {isPlaying ? '⏸️' : '▶️'}
+              {isPlaying ? (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+                </svg>
+              ) : (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M8 5v14l11-7z"/>
+                </svg>
+              )}
             </button>
 
             {/* Integrated Forward skip button */}
             <button 
               type="button" 
               onClick={seekForward} 
-              style={{ cursor: 'pointer', fontSize: '15px', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+              style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', padding: '4px' }}
               title="Forward 10 seconds"
             >
-              ⏩
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M13 5l7 7-7 7M4 5l7 7-7 7" />
+              </svg>
             </button>
 
-            {/* Timer details */}
-            <span style={{ fontSize: '11px', color: 'var(--text-muted)', userSelect: 'none' }}>
-              {formatTime(currentTime)} / {formatTime(duration)}
-            </span>
+            {/* Timer details & State Badge */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)', userSelect: 'none' }}>
+                {formatTime(currentTime)} / {formatTime(duration)}
+              </span>
+              <span style={{
+                fontSize: '10px',
+                fontWeight: '700',
+                textTransform: 'uppercase',
+                backgroundColor: getPlayerState().color,
+                color: '#fff',
+                padding: '2px 6px',
+                borderRadius: '2px',
+                userSelect: 'none',
+                letterSpacing: '0.5px'
+              }}>
+                {getPlayerState().label}
+              </span>
+            </div>
           </div>
 
           {/* Media Controls Group Right */}
           <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-            {/* Mute button */}
-            <button 
-              type="button" 
-              onClick={() => {
-                if (videoRef.current) {
-                  videoRef.current.muted = !videoRef.current.muted;
-                  setIsMuted(videoRef.current.muted);
-                }
-              }} 
-              style={{ cursor: 'pointer', fontSize: '14px', color: '#fff' }}
-            >
-              {isMuted ? '🔇' : '🔊'}
-            </button>
+            {/* Mute button & Volume Slider */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <button 
+                type="button" 
+                onClick={handleVolumeToggle} 
+                style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', padding: '4px' }}
+                title={isMuted ? "Unmute" : "Mute"}
+              >
+                {isMuted ? (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                    <line x1="23" y1="9" x2="17" y2="15"/>
+                    <line x1="17" y1="9" x2="23" y2="15"/>
+                  </svg>
+                ) : volume <= 0.5 ? (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                    <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+                  </svg>
+                ) : (
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+                    <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+                    <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+                  </svg>
+                )}
+              </button>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={isMuted ? 0 : volume}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value);
+                  setVolume(val);
+                  if (videoRef.current) {
+                    videoRef.current.volume = val;
+                    if (val > 0) {
+                      videoRef.current.muted = false;
+                      setIsMuted(false);
+                    } else {
+                      videoRef.current.muted = true;
+                      setIsMuted(true);
+                    }
+                  }
+                }}
+                style={{
+                  width: '50px',
+                  height: '3px',
+                  cursor: 'pointer',
+                  accentColor: '#fff',
+                  backgroundColor: 'rgba(255, 255, 255, 0.2)',
+                  border: 'none',
+                  outline: 'none',
+                  borderRadius: '2px',
+                  display: 'block'
+                }}
+              />
+            </div>
+
             {/* Fullscreen button */}
             <button 
               type="button" 
               onClick={handleFullscreen} 
-              style={{ cursor: 'pointer', fontSize: '14px', color: '#fff' }}
+              style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', padding: '4px' }}
               title="Fullscreen toggle"
             >
-              🔲
+              {isFullscreen ? (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 14h6v6M20 10h-6V4M14 10l7-7M10 14l-7 7"/>
+                </svg>
+              ) : (
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+                </svg>
+              )}
             </button>
           </div>
         </div>
@@ -801,10 +976,14 @@ export default function Watch() {
             <AdPlacement
               placement="video_overlay"
               code={overlayAdCode}
-              onAdLoaded={() => setAdLoading(false)}
+              onAdLoaded={() => {
+                setAdLoading(false);
+                setAdVisible(true);
+              }}
               onAdFailed={() => {
                 console.warn('Overlay ad failed to load. Skipping gracefully to playback.');
                 setAdLoading(false);
+                setAdVisible(false);
                 setShowOverlayAd(false);
                 if (videoRef.current) {
                   videoRef.current.play().catch(err => console.warn('Play failed after ad error:', err));

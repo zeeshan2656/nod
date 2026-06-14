@@ -11,6 +11,21 @@ window.clearAdCache = () => {
   clientAdsPromise = null;
 };
 
+// Export pre-fetch / cache resolver
+export async function getCachedAds() {
+  if (clientAdsCache) return clientAdsCache;
+  if (!clientAdsPromise) {
+    clientAdsPromise = api.get('/ads').then((response) => {
+      clientAdsCache = response.data || {};
+      return clientAdsCache;
+    }).catch((err) => {
+      clientAdsPromise = null; // Clear on error to allow retries
+      throw err;
+    });
+  }
+  return clientAdsPromise;
+}
+
 // Validate that the ad code contains actual executable content and is not a placeholder or comment
 export function isValidAdCode(code) {
   if (!code) return false;
@@ -43,23 +58,9 @@ export default function AdPlacement({ placement, type, code, style, className, o
       return;
     }
 
-    if (clientAdsCache) {
-      setAdCode(clientAdsCache[placement] || null);
-      return;
-    }
-
     const fetchAds = async () => {
       try {
-        if (!clientAdsPromise) {
-          clientAdsPromise = api.get('/ads').then((response) => {
-            clientAdsCache = response.data || {};
-            return clientAdsCache;
-          }).catch((err) => {
-            clientAdsPromise = null; // Clear on error to allow retries
-            throw err;
-          });
-        }
-        const activeAds = await clientAdsPromise;
+        const activeAds = await getCachedAds();
         if (activeAds && activeAds[placement]) {
           setAdCode(activeAds[placement]);
         } else {
@@ -78,122 +79,147 @@ export default function AdPlacement({ placement, type, code, style, className, o
     if (el._lastInjectedCode === adCode) return;
     el._lastInjectedCode = adCode;
 
-    el.innerHTML = '';
-    
-    // Set up tracking
-    let scriptsToLoad = [];
-    let scriptsLoadedCount = 0;
-    let scriptsFailedCount = 0;
-    let resolved = false;
+    let retryCount = 0;
+    const maxRetries = 2;
 
-    // Fail-safe timeout (3 seconds)
-    const loadTimeout = setTimeout(() => {
-      if (!resolved) {
-        resolved = true;
-        console.warn(`Ad placement [${placement}] load timed out.`);
-        if (onAdLoaded) onAdLoaded();
-      }
-    }, 3000);
-
-    const checkCompletion = () => {
-      if (resolved) return;
+    const runAdLoadProcess = () => {
+      el.innerHTML = '';
       
-      const totalScripts = scriptsToLoad.length;
-      if (scriptsLoadedCount + scriptsFailedCount >= totalScripts) {
-        resolved = true;
-        clearTimeout(loadTimeout);
+      let scriptsToLoad = [];
+      let scriptsLoadedCount = 0;
+      let scriptsFailedCount = 0;
+      let resolved = false;
+
+      // Visibility validator
+      const verifyAdVisibility = () => {
+        if (!el) return false;
         
-        if (scriptsFailedCount === totalScripts && totalScripts > 0) {
-          // If all scripts failed (e.g. ad blocked)
-          console.error(`Ad placement [${placement}] all scripts failed to load.`);
-          if (onAdFailed) onAdFailed();
-        } else {
-          // If at least some scripts loaded successfully, or there were no scripts
+        // Exclude script tags
+        const nonScriptChildren = Array.from(el.querySelectorAll('*')).filter(
+          child => child.tagName !== 'SCRIPT'
+        );
+
+        if (nonScriptChildren.length === 0 && el.innerText.trim() === '') {
+          return false;
+        }
+
+        // Verify that at least one DOM element has width/height
+        const hasVisibleContent = nonScriptChildren.some(child => {
+          const rect = child.getBoundingClientRect();
+          return rect.width > 10 && rect.height > 10;
+        }) || (el.innerText.trim().length > 10 && el.getBoundingClientRect().width > 10);
+
+        return hasVisibleContent;
+      };
+
+      // Periodic check for ad visibility
+      let visibilityInterval = setInterval(() => {
+        if (verifyAdVisibility()) {
+          clearInterval(visibilityInterval);
+          clearTimeout(loadTimeout);
+          resolved = true;
           if (onAdLoaded) onAdLoaded();
+        }
+      }, 150);
+
+      // Timeout for attempt
+      const loadTimeout = setTimeout(() => {
+        clearInterval(visibilityInterval);
+        if (resolved) return;
+
+        if (retryCount < maxRetries) {
+          retryCount++;
+          console.warn(`Ad placement [${placement}] failed visibility check. Retrying attempt ${retryCount}/${maxRetries}...`);
+          runAdLoadProcess();
+        } else {
+          console.error(`Ad placement [${placement}] load failed after maximum retries.`);
+          if (onAdFailed) onAdFailed();
+        }
+      }, 4000); // 4 seconds per attempt
+
+      const checkCompletion = () => {
+        if (resolved) return;
+        
+        const totalScripts = scriptsToLoad.length;
+        if (scriptsLoadedCount + scriptsFailedCount >= totalScripts) {
+          // Once scripts finish loading, let visibilityInterval verify actual content rendering
+        }
+      };
+
+      try {
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = adCode;
+
+        const scriptTags = tempDiv.getElementsByTagName('script');
+        const scriptsToInject = [];
+
+        while (scriptTags.length > 0) {
+          scriptsToInject.push(scriptTags[0]);
+          scriptTags[0].parentNode.removeChild(scriptTags[0]);
+        }
+
+        while (tempDiv.firstChild) {
+          el.appendChild(tempDiv.firstChild);
+        }
+
+        scriptsToInject.forEach((script) => {
+          if (script.getAttribute('src')) {
+            scriptsToLoad.push(script);
+          }
+        });
+
+        if (scriptsToInject.length === 0) {
+          // If no scripts, verify visibility directly (static ad code)
+          return;
+        }
+
+        scriptsToInject.forEach((oldScript) => {
+          const newScript = document.createElement('script');
+
+          Array.from(oldScript.attributes).forEach((attr) => {
+            newScript.setAttribute(attr.name, attr.value);
+          });
+
+          newScript.textContent = oldScript.textContent;
+
+          const srcAttr = oldScript.getAttribute('src');
+          if (srcAttr) {
+            newScript.onload = () => {
+              scriptsLoadedCount++;
+              checkCompletion();
+            };
+            newScript.onerror = () => {
+              scriptsFailedCount++;
+              checkCompletion();
+            };
+          }
+
+          el.appendChild(newScript);
+
+          if (!srcAttr) {
+            checkCompletion();
+          }
+        });
+      } catch (err) {
+        console.error(`Failed executing scripts for ad placement [${placement}]:`, err);
+        clearInterval(visibilityInterval);
+        clearTimeout(loadTimeout);
+        if (retryCount < maxRetries) {
+          retryCount++;
+          runAdLoadProcess();
+        } else {
+          if (onAdFailed) onAdFailed();
         }
       }
     };
 
-    try {
-      // Parse adCode into DOM nodes using a temporary container
-      const tempDiv = document.createElement('div');
-      tempDiv.innerHTML = adCode;
-
-      // Extract script elements
-      const scriptTags = tempDiv.getElementsByTagName('script');
-      const scriptsToInject = [];
-
-      while (scriptTags.length > 0) {
-        scriptsToInject.push(scriptTags[0]);
-        scriptTags[0].parentNode.removeChild(scriptTags[0]);
-      }
-
-      // Append container markup first so it exists in DOM when script executes
-      while (tempDiv.firstChild) {
-        el.appendChild(tempDiv.firstChild);
-      }
-
-      // Filter external scripts that need loading
-      scriptsToInject.forEach((script) => {
-        if (script.getAttribute('src')) {
-          scriptsToLoad.push(script);
-        }
-      });
-
-      if (scriptsToInject.length === 0) {
-        // No scripts to run at all
-        resolved = true;
-        clearTimeout(loadTimeout);
-        if (onAdLoaded) onAdLoaded();
-        return;
-      }
-
-      // Programmatically create and load each script
-      scriptsToInject.forEach((oldScript) => {
-        const newScript = document.createElement('script');
-
-        // Copy attributes directly to preserve original script URLs exactly
-        Array.from(oldScript.attributes).forEach((attr) => {
-          newScript.setAttribute(attr.name, attr.value);
-        });
-
-        // Copy inline script content
-        newScript.textContent = oldScript.textContent;
-
-        const srcAttr = oldScript.getAttribute('src');
-        if (srcAttr) {
-          // External script
-          newScript.onload = () => {
-            scriptsLoadedCount++;
-            checkCompletion();
-          };
-          newScript.onerror = () => {
-            scriptsFailedCount++;
-            checkCompletion();
-          };
-        }
-
-        // Append script to run it
-        el.appendChild(newScript);
-
-        if (!srcAttr) {
-          // Inline scripts execute synchronously upon insertion
-          checkCompletion();
-        }
-      });
-    } catch (err) {
-      console.error(`Failed executing scripts for ad placement [${placement}]:`, err);
-      resolved = true;
-      clearTimeout(loadTimeout);
-      if (onAdFailed) onAdFailed();
-    }
+    runAdLoadProcess();
   };
 
   if (!isValidAdCode(adCode)) {
     return null;
   }
 
-  // Device-specific check:
   if (placement.includes('desktop') && isMobileScreen) {
     return null;
   }
