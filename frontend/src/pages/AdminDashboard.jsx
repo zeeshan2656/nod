@@ -348,7 +348,7 @@ export default function AdminDashboard() {
                 {/* Thumbnail */}
                 <div style={{ width: '90px', aspectRatio: '16/9', backgroundColor: '#000', position: 'relative', flexShrink: 0, borderRadius: '1px', overflow: 'hidden' }}>
                   <img 
-                    src={`${API_BASE_URL}/api/videos/${video.id}/thumbnail`} 
+                    src={`${API_BASE_URL}/api/videos/${video.id}/thumbnail?t=${video.thumbnail_position || 1}`} 
                     alt="thumb" 
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
                     loading="lazy"

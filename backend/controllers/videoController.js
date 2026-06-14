@@ -623,7 +623,7 @@ exports.getRelatedVideos = async (req, res) => {
 
     // Limit returned fields for speed, query completed ready status only, exclude current video id
     const [rows] = await db.query(
-      'SELECT id, title, views_count FROM videos WHERE id != ? AND status = "ready" ORDER BY created_at DESC LIMIT 10',
+      'SELECT id, title, views_count, thumbnail_position FROM videos WHERE id != ? AND status = "ready" ORDER BY created_at DESC LIMIT 10',
       [id]
     );
 

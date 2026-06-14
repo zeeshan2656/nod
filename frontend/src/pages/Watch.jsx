@@ -596,6 +596,47 @@ export default function Watch() {
         style={{ cursor: 'pointer' }}
       />
 
+      {/* Centered Stop/Pause Indicator Overlay when video is stopped/paused */}
+      {!isPlaying && !showOverlayAd && (
+        <div 
+          onClick={handlePlayPause}
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)',
+            backgroundColor: 'rgba(15, 15, 15, 0.75)',
+            width: '68px',
+            height: '68px',
+            borderRadius: '50%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            zIndex: 15,
+            border: '2px solid rgba(255, 255, 255, 0.3)',
+            boxShadow: '0 8px 24px rgba(0, 0, 0, 0.6)',
+            transition: 'all 0.2s ease',
+            pointerEvents: 'auto'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = 'rgba(15, 15, 15, 0.9)';
+            e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.7)';
+            e.currentTarget.style.transform = 'translate(-50%, -50%) scale(1.08)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = 'rgba(15, 15, 15, 0.75)';
+            e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.3)';
+            e.currentTarget.style.transform = 'translate(-50%, -50%) scale(1)';
+          }}
+        >
+          {/* Unicode Pause Sign (Stop indicator) */}
+          <span style={{ fontSize: '24px', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1 }}>
+            ⏸️
+          </span>
+        </div>
+      )}
+
       {/* Double Tap Visual Indicator overlays */}
       {seekIndicator && (
         <div style={{
@@ -988,7 +1029,7 @@ export default function Watch() {
             >
               <div style={{ width: '110px', aspectRatio: '16/9', backgroundColor: '#000', borderRadius: '1px', overflow: 'hidden', flexShrink: 0 }}>
                 <img 
-                  src={`${API_BASE_URL}/api/videos/${rv.id}/thumbnail`} 
+                  src={`${API_BASE_URL}/api/videos/${rv.id}/thumbnail?t=${rv.thumbnail_position || 1}`} 
                   alt={rv.title} 
                   style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
                   loading="lazy"

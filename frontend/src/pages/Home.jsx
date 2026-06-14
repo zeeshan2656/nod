@@ -159,7 +159,7 @@ export default function Home() {
                   <div className="video-thumbnail-container">
                     <img
                       className="video-thumbnail"
-                      src={`${API_BASE_URL}/api/videos/${video.id}/thumbnail`}
+                      src={`${API_BASE_URL}/api/videos/${video.id}/thumbnail?t=${video.thumbnail_position || 1}`}
                       alt={video.title}
                       loading="lazy"
                       width="640"
