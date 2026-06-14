@@ -181,27 +181,7 @@ function ReelItem({ reel, isActive, shouldPreload, isMuted, setIsMuted }) {
   return (
     <div className="reel-card" style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden' }}>
       {toast && <Toast message={toast} onClose={() => setToast('')} />}
-      
-      {/* Reels Top Overlay Ad (Only mounted and loaded for the active reel, refreshes on swipe) */}
-      {isActive && (
-        <AdPlacement 
-          placement="reels_top_overlay" 
-          className="reels-top-ad-wrapper"
-          style={{
-            position: 'absolute',
-            top: '0px',
-            left: '0px',
-            right: '0px',
-            padding: '0px',
-            minHeight: '50px',
-            zIndex: 100,
-            pointerEvents: 'auto',
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center'
-          }}
-        />
-      )}
+
 
       <div className="reel-video-container" onClick={handleToggleMute} style={{ width: '100%', height: '100%', cursor: 'pointer' }}>
         <video
@@ -478,8 +458,26 @@ export default function Reels() {
   });
 
   return (
-    <div ref={containerRef} className="reels-feed-container">
-      {items.map((item) => {
+    <>
+      <AdPlacement 
+        placement="reels_top_overlay" 
+        className="reels-top-ad-wrapper"
+        style={{
+          position: 'fixed',
+          top: '0px',
+          left: '0px',
+          right: '0px',
+          padding: '0px',
+          zIndex: 10000,
+          pointerEvents: 'auto',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          backgroundColor: 'transparent'
+        }}
+      />
+      <div ref={containerRef} className="reels-feed-container">
+        {items.map((item) => {
         const isActive = activeReelIndex === item.index;
         
         // Advanced preloading: Preload the next 2 reels to prevent parallel connection throttling
@@ -515,5 +513,6 @@ export default function Reels() {
         );
       })}
     </div>
+    </>
   );
 }
