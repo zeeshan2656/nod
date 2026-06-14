@@ -4,8 +4,12 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const videoController = require('../controllers/videoController');
+const uploadController = require('../controllers/uploadController');
 const { requireAdmin, requireAuth, authenticateToken } = require('../middlewares/auth');
 const { authLimiter } = require('../middlewares/rateLimiter');
+
+// Configure Multer Memory Storage for chunked uploads
+const memoryUpload = multer({ storage: multer.memoryStorage() });
 
 // Configure Multer Disk Storage for Video Uploads
 const tempUploadPath = path.join(__dirname, '..', 'uploads', 'temp');
@@ -43,6 +47,13 @@ const upload = multer({
     fileSize: 500 * 1024 * 1024 // 500 MB upload limit per file
   }
 });
+
+// Chunked upload system endpoints (YouTube-style background upload system)
+router.post('/upload/initiate', requireAdmin, uploadController.initiateUpload);
+router.post('/upload/chunk', requireAdmin, memoryUpload.single('chunk'), uploadController.uploadChunk);
+router.get('/upload/status/:uploadId', requireAdmin, uploadController.getUploadStatus);
+router.put('/upload/metadata', requireAdmin, uploadController.updateUploadMetadata);
+router.post('/upload/cancel/:uploadId', requireAdmin, uploadController.cancelUpload);
 
 // 1. Upload multiple videos (Admin-only, protected by rate limiting)
 router.post(

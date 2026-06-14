@@ -3,6 +3,9 @@ import { BrowserRouter as Router, Routes, Route, Link, NavLink, Navigate, useLoc
 import { AuthProvider, AuthContext } from './context/AuthContext';
 import AnalyticsInjector from './components/AnalyticsInjector';
 import AdPlacement from './components/AdPlacement';
+import { UploadQueueProvider } from './context/UploadQueueContext';
+import UploadQueuePanel from './components/UploadQueuePanel';
+import UploadDetailsModal from './components/UploadDetailsModal';
 
 // Lazy-loaded pages (Code-splitting to reduce initial bundle footprint, boosting PageSpeed score)
 const Home = lazy(() => import('./pages/Home'));
@@ -317,6 +320,9 @@ function AppLayout() {
           </div>
         </footer>
       )}
+      {/* Background Upload Queue Panels */}
+      <UploadQueuePanel />
+      <UploadDetailsModal />
     </>
   );
 }
@@ -324,10 +330,12 @@ function AppLayout() {
 export default function App() {
   return (
     <AuthProvider>
-      <Router>
-        <AnalyticsInjector />
-        <AppLayout />
-      </Router>
+      <UploadQueueProvider>
+        <Router>
+          <AnalyticsInjector />
+          <AppLayout />
+        </Router>
+      </UploadQueueProvider>
     </AuthProvider>
   );
 }

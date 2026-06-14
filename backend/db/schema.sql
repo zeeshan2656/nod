@@ -47,6 +47,25 @@ CREATE TABLE IF NOT EXISTS reels (
     INDEX idx_status_created (status, created_at DESC, id DESC)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- 3.5. Upload Queue table (for resuming chunk uploads)
+CREATE TABLE IF NOT EXISTS upload_queue (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    upload_id VARCHAR(100) NOT NULL UNIQUE,
+    title VARCHAR(255) NOT NULL,
+    description TEXT,
+    file_name VARCHAR(255) NOT NULL,
+    file_size BIGINT NOT NULL,
+    uploaded_bytes BIGINT DEFAULT 0,
+    status VARCHAR(50) DEFAULT 'queued',
+    duration FLOAT DEFAULT 0,
+    width INT DEFAULT 0,
+    height INT DEFAULT 0,
+    upload_type VARCHAR(20) DEFAULT 'video',
+    video_id INT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 -- 4. Likes table
 CREATE TABLE IF NOT EXISTS likes (
     id INT AUTO_INCREMENT PRIMARY KEY,

@@ -1,18 +1,18 @@
-import React, { useState, useEffect, useContext } from 'react';
+import React, { useState, useEffect, useContext, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import api from '../utils/api';
 import { AuthContext } from '../context/AuthContext';
+import { UploadQueueContext } from '../context/UploadQueueContext';
 import Toast from '../components/Toast';
 
 export default function AdminUpload() {
   const { user, loading: authLoading, isAdmin } = useContext(AuthContext);
+  const { addToQueue, queue, setIsQueueVisible, setIsMinimized } = useContext(UploadQueueContext);
   const navigate = useNavigate();
 
   const [uploadType, setUploadType] = useState('video'); // 'video' or 'reel'
-  const [selectedFiles, setSelectedFiles] = useState([]);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [uploading, setUploading] = useState(false);
   const [toast, setToast] = useState({ message: '', type: 'success' });
+  const [isDragOver, setIsDragOver] = useState(false);
+  const fileInputRef = useRef(null);
 
   // Admin guard redirect
   useEffect(() => {
@@ -21,57 +21,63 @@ export default function AdminUpload() {
     }
   }, [user, authLoading, isAdmin, navigate]);
 
-  const handleFileChange = (e) => {
-    setSelectedFiles(Array.from(e.target.files));
-  };
+  const handleFilesSelected = async (filesList) => {
+    const files = Array.from(filesList);
+    if (files.length === 0) return;
 
-  const handleUpload = async (e) => {
-    e.preventDefault();
-    if (selectedFiles.length === 0) {
-      setToast({ message: 'Please select at least one file.', type: 'danger' });
+    // Filter non-video files
+    const videoFiles = files.filter(f => f.type.startsWith('video/') || /\.(mp4|mkv|avi|mov|webm)$/i.test(f.name));
+    
+    if (videoFiles.length === 0) {
+      setToast({ message: 'No valid video files selected.', type: 'danger' });
       return;
     }
 
-    setUploading(true);
-    setUploadProgress(0);
-
-    const formData = new FormData();
-    const fieldName = uploadType === 'video' ? 'videos' : 'reels';
-    const endpoint = uploadType === 'video' ? '/videos' : '/reels';
-
-    selectedFiles.forEach((file) => {
-      formData.append(fieldName, file);
-    });
-
     try {
-      await api.post(endpoint, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data'
-        },
-        onUploadProgress: (progressEvent) => {
-          const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-          setUploadProgress(percentCompleted);
-        }
-      });
-
+      await addToQueue(videoFiles, uploadType);
+      
       setToast({ 
-        message: `Uploaded ${selectedFiles.length} ${uploadType === 'video' ? 'video(s)' : 'reel(s)'} successfully! Queued for transcoding.`, 
+        message: `Successfully added ${videoFiles.length} item(s) to the background upload queue!`, 
         type: 'success' 
       });
-      setSelectedFiles([]);
-      // Reset input element
-      document.getElementById('media-files').value = null;
+      
+      // Auto open and maximize the queue panel
+      setIsQueueVisible(true);
+      setIsMinimized(false);
 
-      // Navigate back to dashboard after a delay
-      setTimeout(() => {
-        navigate('/admin');
-      }, 2000);
-
+      if (fileInputRef.current) {
+        fileInputRef.current.value = null;
+      }
     } catch (err) {
-      console.error('Upload failed:', err);
-      setToast({ message: err.response?.data?.error || 'Upload failed.', type: 'danger' });
-    } finally {
-      setUploading(false);
+      console.error(err);
+      setToast({ message: 'Failed to process files for upload.', type: 'danger' });
+    }
+  };
+
+  const handleFileChange = (e) => {
+    handleFilesSelected(e.target.files);
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsDragOver(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    if (e.dataTransfer.files) {
+      handleFilesSelected(e.dataTransfer.files);
+    }
+  };
+
+  const triggerSelect = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click();
     }
   };
 
@@ -79,113 +85,177 @@ export default function AdminUpload() {
     return <div style={{ textAlign: 'center', padding: '50px', color: 'var(--text-muted)' }}>Loading...</div>;
   }
 
+  // Count active uploads currently running in the background
+  const activeCount = queue.filter(item => 
+    ['queued', 'uploading', 'processing', 'generating_thumbnail', 'saving_metadata'].includes(item.status)
+  ).length;
+
   return (
-    <div className="admin-container" style={{ maxWidth: '600px' }}>
+    <div className="admin-container" style={{ maxWidth: '720px' }}>
       {toast.message && <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: '', type: 'success' })} />}
 
-      <div className="admin-title-row">
-        <h1 style={{ fontSize: '20px', fontWeight: '700' }}>Upload Media Files</h1>
-        <Link to="/admin" className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '13px' }}>Dashboard</Link>
+      <div className="admin-title-row" style={{ marginBottom: '20px' }}>
+        <div>
+          <h1 style={{ fontSize: '22px', fontWeight: '700', margin: 0 }}>Upload Media Files</h1>
+          <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '4px 0 0 0' }}>
+            Videos are processed sequentially and transcoded to adaptive HLS stream segments.
+          </p>
+        </div>
+        <Link to="/admin" className="btn btn-secondary" style={{ padding: '8px 16px', fontSize: '13px' }}>
+          Dashboard
+        </Link>
       </div>
 
-      <div style={{ backgroundColor: 'var(--card-bg)', border: '1px solid var(--border-color)', padding: '24px', borderRadius: '2px' }}>
-        <form onSubmit={handleUpload}>
-          {/* Upload type selection */}
-          <div className="form-group">
-            <label className="form-label">Media Type</label>
-            <div style={{ display: 'flex', gap: '16px', marginTop: '6px' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
-                <input
-                  type="radio"
-                  name="uploadType"
-                  value="video"
-                  checked={uploadType === 'video'}
-                  onChange={() => {
-                    setUploadType('video');
-                    setSelectedFiles([]);
-                  }}
-                  disabled={uploading}
-                />
-                Regular Video (landscape aspect ratios)
-              </label>
+      <div style={{ 
+        backgroundColor: 'var(--card-bg)', 
+        border: '1px solid var(--border-color)', 
+        padding: '28px', 
+        borderRadius: '8px',
+        boxShadow: '0 4px 16px rgba(0,0,0,0.2)'
+      }}>
+        {/* Toggle Media Type */}
+        <div style={{ marginBottom: '24px' }}>
+          <label style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-muted)', display: 'block', marginBottom: '8px' }}>
+            SELECT UPLOAD DESTINATION TYPE
+          </label>
+          <div style={{ display: 'flex', gap: '16px' }}>
+            <div 
+              onClick={() => setUploadType('video')}
+              style={{
+                flex: 1,
+                border: `2px solid ${uploadType === 'video' ? 'var(--accent, #3b82f6)' : 'var(--border-color)'}`,
+                backgroundColor: uploadType === 'video' ? 'rgba(59, 130, 246, 0.05)' : 'transparent',
+                borderRadius: '6px',
+                padding: '16px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                transition: 'all 0.2s'
+              }}
+            >
+              <input 
+                type="radio" 
+                name="uploadType" 
+                checked={uploadType === 'video'} 
+                onChange={() => setUploadType('video')}
+                style={{ cursor: 'pointer' }}
+              />
+              <div>
+                <strong style={{ display: 'block', fontSize: '14px', color: '#fff' }}>Landscape Video</strong>
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Standard 16:9 / 4:3 videos. Limit: 500MB each.</span>
+              </div>
+            </div>
 
-              <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}>
-                <input
-                  type="radio"
-                  name="uploadType"
-                  value="reel"
-                  checked={uploadType === 'reel'}
-                  onChange={() => {
-                    setUploadType('reel');
-                    setSelectedFiles([]);
-                  }}
-                  disabled={uploading}
-                />
-                Reel / Short Video (vertical format)
-              </label>
+            <div 
+              onClick={() => setUploadType('reel')}
+              style={{
+                flex: 1,
+                border: `2px solid ${uploadType === 'reel' ? 'var(--accent, #3b82f6)' : 'var(--border-color)'}`,
+                backgroundColor: uploadType === 'reel' ? 'rgba(59, 130, 246, 0.05)' : 'transparent',
+                borderRadius: '6px',
+                padding: '16px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px',
+                transition: 'all 0.2s'
+              }}
+            >
+              <input 
+                type="radio" 
+                name="uploadType" 
+                checked={uploadType === 'reel'} 
+                onChange={() => setUploadType('reel')}
+                style={{ cursor: 'pointer' }}
+              />
+              <div>
+                <strong style={{ display: 'block', fontSize: '14px', color: '#fff' }}>Vertical Reel / Short</strong>
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Vertical 9:16 format videos. Limit: 200MB each.</span>
+              </div>
             </div>
           </div>
+        </div>
 
-          {/* Files select input */}
-          <div className="form-group" style={{ marginTop: '20px' }}>
-            <label className="form-label">Choose File(s) - Select Multiple Simultaneously</label>
-            <input
-              type="file"
-              id="media-files"
-              className="form-input"
-              multiple
-              accept="video/*"
-              onChange={handleFileChange}
-              disabled={uploading}
-              required
-            />
-            <span style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
-              Supported formats: MP4, MKV, AVI, MOV, WEBM. Maximum filesize: {uploadType === 'video' ? '500MB' : '200MB'} each.
-            </span>
+        {/* Drag & Drop Zone */}
+        <div 
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          onClick={triggerSelect}
+          style={{
+            border: `2px dashed ${isDragOver ? 'var(--accent, #3b82f6)' : 'var(--border-color, #333)'}`,
+            backgroundColor: isDragOver ? 'rgba(59, 130, 246, 0.03)' : 'rgba(0,0,0,0.1)',
+            borderRadius: '8px',
+            padding: '48px 20px',
+            textAlign: 'center',
+            cursor: 'pointer',
+            transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+            transform: isDragOver ? 'scale(1.01)' : 'scale(1)',
+            boxSizing: 'border-box'
+          }}
+        >
+          <input 
+            type="file" 
+            ref={fileInputRef}
+            onChange={handleFileChange}
+            multiple 
+            accept="video/*"
+            style={{ display: 'none' }}
+          />
+
+          <div style={{ fontSize: '42px', marginBottom: '16px' }}>
+            📥
           </div>
+          
+          <h3 style={{ fontSize: '16px', fontWeight: '600', margin: '0 0 8px 0', color: '#fff' }}>
+            Drag and drop video files here
+          </h3>
+          
+          <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: '0 0 16px 0' }}>
+            or click to browse from your device
+          </p>
 
-          {/* List selected files */}
-          {selectedFiles.length > 0 && (
-            <div style={{ margin: '16px 0', border: '1px solid var(--border-color)', padding: '12px', background: 'rgba(255,255,255,0.02)' }}>
-              <div style={{ fontWeight: '600', fontSize: '12px', color: 'var(--text-muted)', marginBottom: '8px' }}>
-                SELECTED FILES ({selectedFiles.length}):
-              </div>
-              <ul style={{ listStyleType: 'none', paddingLeft: 0, maxHeight: '120px', overflowY: 'auto', fontSize: '12px' }}>
-                {selectedFiles.map((f, i) => (
-                  <li key={i} style={{ padding: '3px 0', borderBottom: '1px solid #222', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    🎬 {f.name} ({(f.size / (1024 * 1024)).toFixed(2)} MB)
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {/* Progress bar */}
-          {uploading && (
-            <div style={{ margin: '20px 0' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', marginBottom: '4px' }}>
-                <span>Uploading...</span>
-                <span>{uploadProgress}%</span>
-              </div>
-              <div style={{ width: '100%', height: '6px', backgroundColor: '#333', borderRadius: '3px', overflow: 'hidden' }}>
-                <div style={{ width: `${uploadProgress}%`, height: '100%', backgroundColor: 'var(--accent)', transition: 'width 0.2s' }} />
-              </div>
-              <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginTop: '6px', textAlign: 'center' }}>
-                {uploadProgress === 100 ? 'Processing on server... Do not close this page.' : 'Sending binary data streams...'}
-              </span>
-            </div>
-          )}
-
-          {/* Submit Button */}
           <button 
-            type="submit" 
-            className={`btn btn-primary ${uploading ? 'btn-disabled' : ''}`} 
-            style={{ width: '100%', marginTop: '20px', height: '42px' }}
-            disabled={uploading}
+            type="button" 
+            className="btn btn-primary"
+            style={{ padding: '8px 24px', fontSize: '13px', pointerEvents: 'none' }}
           >
-            {uploading ? 'Uploading Media...' : `Start Upload (${selectedFiles.length} file(s))`}
+            Select Files
           </button>
-        </form>
+          
+          <div style={{ marginTop: '20px', fontSize: '11px', color: 'var(--text-muted)' }}>
+            Supported formats: MP4, MKV, AVI, MOV, WEBM. Select up to 100+ files for sequential bulk upload.
+          </div>
+        </div>
+
+        {/* Active Uploads Indicator shortcut */}
+        {activeCount > 0 && (
+          <div 
+            onClick={() => {
+              setIsQueueVisible(true);
+              setIsMinimized(false);
+            }}
+            style={{ 
+              marginTop: '24px', 
+              backgroundColor: 'rgba(59, 130, 246, 0.08)', 
+              border: '1px solid rgba(59, 130, 246, 0.2)', 
+              padding: '12px 16px', 
+              borderRadius: '6px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              cursor: 'pointer',
+              fontSize: '13px'
+            }}
+          >
+            <span style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#93c5fd', fontWeight: '500' }}>
+              <span style={{ width: '8px', height: '8px', backgroundColor: '#3b82f6', borderRadius: '50%', display: 'inline-block' }} />
+              {activeCount} upload(s) running in background. You can navigate away.
+            </span>
+            <span style={{ color: '#3b82f6', fontWeight: '600' }}>View Queue &rarr;</span>
+          </div>
+        )}
       </div>
     </div>
   );

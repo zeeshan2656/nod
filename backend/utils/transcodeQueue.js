@@ -4,6 +4,8 @@ const db = require('../config/db');
 const cache = require('../config/cache');
 const { transcodeToHLS } = require('./ffmpegHelper');
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 class TranscodeQueue {
   constructor(concurrency = 1) {
     this.queue = [];
@@ -37,6 +39,26 @@ class TranscodeQueue {
       // 1. Run FFmpeg transcoding to HLS
       await transcodeToHLS(job.inputPath, job.outputPath, job.height);
 
+      // Find the associated upload_queue session for status transitions
+      const [sessions] = await db.query(
+        'SELECT upload_id, status FROM upload_queue WHERE video_id = ? AND upload_type = ?',
+        [job.id, job.type]
+      );
+      const session = sessions[0];
+
+      if (session && session.status !== 'cancelled') {
+        // Transition 1: Generating Thumbnail
+        await db.query('UPDATE upload_queue SET status = "generating_thumbnail" WHERE upload_id = ?', [session.upload_id]);
+        await sleep(1500);
+
+        // Transition 2: Saving Metadata
+        await db.query('UPDATE upload_queue SET status = "saving_metadata" WHERE upload_id = ?', [session.upload_id]);
+        await sleep(1500);
+
+        // Finalize: Completed
+        await db.query('UPDATE upload_queue SET status = "completed" WHERE upload_id = ?', [session.upload_id]);
+      }
+
       // 2. Update Database Record
       const table = job.type === 'video' ? 'videos' : 'reels';
       const webPath = `/uploads/processed/${job.type}s/${job.id}/master.m3u8`;
@@ -64,6 +86,12 @@ class TranscodeQueue {
     } catch (err) {
       console.error(`[Queue] Transcoding failed for ${job.type} ID ${job.id}:`, err.message);
       
+      // Update upload_queue to failed
+      await db.query(
+        'UPDATE upload_queue SET status = "failed" WHERE video_id = ? AND upload_type = ?',
+        [job.id, job.type]
+      );
+
       const table = job.type === 'video' ? 'videos' : 'reels';
       await db.query(
         `UPDATE ${table} SET status = 'failed' WHERE id = ?`,

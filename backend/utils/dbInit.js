@@ -12,6 +12,27 @@ async function initializeDatabase() {
       initialized = true;
     }
 
+    // Always guarantee upload_queue table exists
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS upload_queue (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          upload_id VARCHAR(100) NOT NULL UNIQUE,
+          title VARCHAR(255) NOT NULL,
+          description TEXT,
+          file_name VARCHAR(255) NOT NULL,
+          file_size BIGINT NOT NULL,
+          uploaded_bytes BIGINT DEFAULT 0,
+          status VARCHAR(50) DEFAULT 'queued',
+          duration FLOAT DEFAULT 0,
+          width INT DEFAULT 0,
+          height INT DEFAULT 0,
+          upload_type VARCHAR(20) DEFAULT 'video',
+          video_id INT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+    `);
+
     if (!initialized) {
       console.log('[Database] Tables not found. Auto-initializing database from schema.sql...');
     const schemaPath = path.join(__dirname, '..', 'db', 'schema.sql');
