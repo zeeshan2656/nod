@@ -129,14 +129,9 @@ export default function AdPlacement({ placement, type, code, onAdLoaded, onAdFai
       scriptsToInject.forEach((oldScript) => {
         const newScript = document.createElement('script');
 
-        // Copy attributes & apply cache buster to the src attribute
+        // Copy attributes directly to preserve original script URLs exactly
         Array.from(oldScript.attributes).forEach((attr) => {
-          let val = attr.value;
-          if (attr.name.toLowerCase() === 'src' && val) {
-            // Force reload script by adding a cache-busting timestamp
-            val = val + (val.indexOf('?') >= 0 ? '&' : '?') + '_t=' + Date.now();
-          }
-          newScript.setAttribute(attr.name, val);
+          newScript.setAttribute(attr.name, attr.value);
         });
 
         // Copy inline script content
