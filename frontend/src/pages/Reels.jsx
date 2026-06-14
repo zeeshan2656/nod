@@ -6,7 +6,7 @@ import Toast from '../components/Toast';
 import Hls from 'hls.js';
 
 // Individual Reel Component
-function ReelItem({ reel, isActive, shouldPreload, isMuted, setIsMuted }) {
+const ReelItem = React.memo(function ReelItem({ reel, isActive, shouldPreload, isMuted, setIsMuted }) {
   const videoRef = useRef(null);
   const hlsRef = useRef(null);
   const viewLogged = useRef(false);
@@ -182,6 +182,26 @@ function ReelItem({ reel, isActive, shouldPreload, isMuted, setIsMuted }) {
     <div className="reel-card" style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden' }}>
       {toast && <Toast message={toast} onClose={() => setToast('')} />}
 
+      {/* Dynamic top overlay ad that moves with the reel card */}
+      {isActive && (
+        <AdPlacement 
+          placement="reels_top_overlay" 
+          className="reels-top-ad-wrapper"
+          style={{
+            position: 'absolute',
+            top: '0px',
+            left: '0px',
+            right: '0px',
+            padding: '0px',
+            zIndex: 100,
+            pointerEvents: 'auto',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            backgroundColor: 'transparent'
+          }}
+        />
+      )}
 
       <div className="reel-video-container" onClick={handleToggleMute} style={{ width: '100%', height: '100%', cursor: 'pointer' }}>
         <video
@@ -325,23 +345,62 @@ function ReelItem({ reel, isActive, shouldPreload, isMuted, setIsMuted }) {
       )}
     </div>
   );
-}
+}, (prevProps, nextProps) => {
+  return (
+    prevProps.reel.id === nextProps.reel.id &&
+    prevProps.isActive === nextProps.isActive &&
+    prevProps.shouldPreload === nextProps.shouldPreload &&
+    prevProps.isMuted === nextProps.isMuted
+  );
+});
+
+// Global cache to enable instant reloading and prevent duplicate API calls on page navigations
+let cachedReels = null;
+let cachedNextCursor = null;
+let cachedHasMore = true;
+let cachedActiveIndex = 0;
+let cachedMuteState = true;
 
 // Main Feed Scroll snap Component
 export default function Reels() {
-  const [reels, setReels] = useState([]);
-  const [nextCursor, setNextCursor] = useState(null);
-  const [hasMore, setHasMore] = useState(true);
-  const [loading, setLoading] = useState(true);
-  const [activeReelIndex, setActiveReelIndex] = useState(0);
-  const [isMuted, setIsMuted] = useState(true);
+  const [reels, setReels] = useState(cachedReels || []);
+  const [nextCursor, setNextCursor] = useState(cachedNextCursor || null);
+  const [hasMore, setHasMore] = useState(cachedHasMore);
+  const [loading, setLoading] = useState(!cachedReels);
+  const [activeReelIndex, setActiveReelIndex] = useState(cachedActiveIndex);
+  const [isMuted, setIsMuted] = useState(cachedMuteState);
   const [activeAds, setActiveAds] = useState({});
 
   const containerRef = useRef(null);
 
+  // Sync state back to module cache
+  useEffect(() => {
+    cachedReels = reels;
+  }, [reels]);
+
+  useEffect(() => {
+    cachedNextCursor = nextCursor;
+  }, [nextCursor]);
+
+  useEffect(() => {
+    cachedHasMore = hasMore;
+  }, [hasMore]);
+
+  useEffect(() => {
+    cachedActiveIndex = activeReelIndex;
+  }, [activeReelIndex]);
+
+  useEffect(() => {
+    cachedMuteState = isMuted;
+  }, [isMuted]);
+
   // Load initial reels, active ads & disable document scrolling for clean TikTok-style interface
   useEffect(() => {
-    fetchReels();
+    if (reels.length === 0) {
+      fetchReels();
+    } else {
+      setLoading(false);
+    }
     
     const fetchActiveAds = async () => {
       try {
@@ -458,31 +517,13 @@ export default function Reels() {
   });
 
   return (
-    <>
-      <AdPlacement 
-        placement="reels_top_overlay" 
-        className="reels-top-ad-wrapper"
-        style={{
-          position: 'fixed',
-          top: '0px',
-          left: '0px',
-          right: '0px',
-          padding: '0px',
-          zIndex: 10000,
-          pointerEvents: 'auto',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          backgroundColor: 'transparent'
-        }}
-      />
-      <div ref={containerRef} className="reels-feed-container">
-        {items.map((item) => {
+    <div ref={containerRef} className="reels-feed-container">
+      {items.map((item) => {
         const isActive = activeReelIndex === item.index;
         
-        // Advanced preloading: Preload the next 2 reels to prevent parallel connection throttling
-        const shouldPreload = item.index > activeReelIndex && item.index <= activeReelIndex + 2;
-        const isRendered = item.index >= activeReelIndex - 1 && item.index <= activeReelIndex + 3;
+        // Advanced preloading: Preload the next 5 reels to buffer playback smoothly
+        const shouldPreload = item.index > activeReelIndex && item.index <= activeReelIndex + 5;
+        const isRendered = item.index >= activeReelIndex - 1 && item.index <= activeReelIndex + 5;
 
         if (item.type === 'ad') {
           return (
@@ -513,6 +554,5 @@ export default function Reels() {
         );
       })}
     </div>
-    </>
   );
 }
