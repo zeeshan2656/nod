@@ -153,17 +153,6 @@ export default function AdPlacement({ placement, type, code, onAdLoaded, onAdFai
             scriptsFailedCount++;
             checkCompletion();
           };
-
-          // Clear any global window states set by this ad key (e.g. Adsterra keys)
-          const match = srcAttr.match(/\/([a-f0-9]{32})\//i);
-          if (match && match[1]) {
-            const key = match[1];
-            delete window[key];
-            delete window['_' + key];
-            if (window.atOptions) {
-              window.atOptions = null;
-            }
-          }
         }
 
         // Append script to run it
