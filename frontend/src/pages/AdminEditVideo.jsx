@@ -12,6 +12,7 @@ export default function AdminEditVideo() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [selectedThumb, setSelectedThumb] = useState(1);
+  const [sourceType, setSourceType] = useState('upload');
   const [tempThumbs, setTempThumbs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingThumbs, setLoadingThumbs] = useState(true);
@@ -43,11 +44,16 @@ export default function AdminEditVideo() {
       setTitle(video.title);
       setDescription(video.description || '');
       setSelectedThumb(video.thumbnail_position || 1);
+      setSourceType(video.source_type || 'upload');
 
       setLoading(false);
 
       // Load temporary thumbnails in background
-      loadTemporaryThumbnails();
+      if (!video.source_type || video.source_type === 'upload') {
+        loadTemporaryThumbnails();
+      } else {
+        setLoadingThumbs(false);
+      }
     } catch (err) {
       console.error('Failed to load video details:', err);
       setToast({ message: 'Error loading video details.', type: 'danger' });
@@ -143,50 +149,52 @@ export default function AdminEditVideo() {
           </div>
 
           {/* Thumbnail Selection Area */}
-          <div className="form-group" style={{ marginTop: '24px' }}>
-            <label className="form-label" style={{ fontWeight: '600', color: '#fff' }}>
-              Select Cover Thumbnail (Frame Position)
-            </label>
-            <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginBottom: '10px' }}>
-              We extract 10 temporary frames throughout the video. Choose one as the thumbnail cover. No thumbnail image files will be permanently saved.
-            </span>
+          {sourceType === 'upload' && (
+            <div className="form-group" style={{ marginTop: '24px' }}>
+              <label className="form-label" style={{ fontWeight: '600', color: '#fff' }}>
+                Select Cover Thumbnail (Frame Position)
+              </label>
+              <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginBottom: '10px' }}>
+                We extract 10 temporary frames throughout the video. Choose one as the thumbnail cover. No thumbnail image files will be permanently saved.
+              </span>
 
-            {loadingThumbs ? (
-              <div style={{ padding: '20px 0', color: 'var(--text-muted)', fontSize: '12px' }}>
-                ⏳ Extracting 10 frames from video file using FFmpeg... Please wait.
-              </div>
-            ) : thumbError ? (
-              <div style={{ color: 'var(--danger)', fontSize: '13px', padding: '12px', border: '1px solid rgba(244,67,54,0.3)', backgroundColor: 'rgba(244, 67, 54, 0.05)', borderRadius: '2px' }}>
-                <strong>Failed to generate preview frames.</strong> Reason: {thumbError}
-              </div>
-            ) : tempThumbs.length === 0 ? (
-              <div style={{ color: 'var(--danger)', fontSize: '12px' }}>
-                Failed to generate preview frames. Double-check if the source file is available.
-              </div>
-            ) : (
-              <div className="thumb-selector-grid">
-                {tempThumbs.map((thumb) => {
-                  const isSelected = selectedThumb === thumb.position;
-                  return (
-                    <div 
-                      key={thumb.position}
-                      className={`thumb-option ${isSelected ? 'selected' : ''}`}
-                      onClick={() => setSelectedThumb(thumb.position)}
-                    >
-                      <img 
-                        src={`${API_BASE_URL}${thumb.url}`} 
-                        alt={`frame-${thumb.position}`}
-                        loading="lazy"
-                      />
-                      <span className="thumb-option-badge">
-                        Frame {thumb.position}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
+              {loadingThumbs ? (
+                <div style={{ padding: '20px 0', color: 'var(--text-muted)', fontSize: '12px' }}>
+                  ⏳ Extracting 10 frames from video file using FFmpeg... Please wait.
+                </div>
+              ) : thumbError ? (
+                <div style={{ color: 'var(--danger)', fontSize: '13px', padding: '12px', border: '1px solid rgba(244,67,54,0.3)', backgroundColor: 'rgba(244, 67, 54, 0.05)', borderRadius: '2px' }}>
+                  <strong>Failed to generate preview frames.</strong> Reason: {thumbError}
+                </div>
+              ) : tempThumbs.length === 0 ? (
+                <div style={{ color: 'var(--danger)', fontSize: '12px' }}>
+                  Failed to generate preview frames. Double-check if the source file is available.
+                </div>
+              ) : (
+                <div className="thumb-selector-grid">
+                  {tempThumbs.map((thumb) => {
+                    const isSelected = selectedThumb === thumb.position;
+                    return (
+                      <div 
+                        key={thumb.position}
+                        className={`thumb-option ${isSelected ? 'selected' : ''}`}
+                        onClick={() => setSelectedThumb(thumb.position)}
+                      >
+                        <img 
+                          src={`${API_BASE_URL}${thumb.url}`} 
+                          alt={`frame-${thumb.position}`}
+                          loading="lazy"
+                        />
+                        <span className="thumb-option-badge">
+                          Frame {thumb.position}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Submit controls */}
           <button 

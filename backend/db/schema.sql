@@ -21,11 +21,14 @@ CREATE TABLE IF NOT EXISTS videos (
     height INT NOT NULL DEFAULT 0,
     aspect_ratio VARCHAR(20) DEFAULT '16:9',
     file_size BIGINT NOT NULL DEFAULT 0,
-    file_path VARCHAR(255) NOT NULL, -- Path to master.m3u8 or temp original
+    file_path VARCHAR(255) DEFAULT NULL, -- Path to master.m3u8 or temp original
     thumbnail_position INT NOT NULL DEFAULT 1, -- 1 to 10
     views_count INT DEFAULT 0,
     likes_count INT DEFAULT 0,
     status VARCHAR(20) DEFAULT 'processing', -- 'processing', 'ready', 'failed'
+    source_type VARCHAR(50) DEFAULT 'upload', -- 'upload', 'youtube', 'gdrive'
+    source_id VARCHAR(100) DEFAULT NULL,
+    source_url TEXT DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_status_created (status, created_at DESC, id DESC),
     INDEX idx_views (views_count DESC, id DESC)
@@ -39,10 +42,13 @@ CREATE TABLE IF NOT EXISTS reels (
     duration FLOAT NOT NULL DEFAULT 0.0,
     width INT NOT NULL DEFAULT 0,
     height INT NOT NULL DEFAULT 0,
-    file_path VARCHAR(255) NOT NULL,
+    file_path VARCHAR(255) DEFAULT NULL,
     views_count INT DEFAULT 0,
     likes_count INT DEFAULT 0,
     status VARCHAR(20) DEFAULT 'processing',
+    source_type VARCHAR(50) DEFAULT 'upload', -- 'upload', 'youtube', 'gdrive'
+    source_id VARCHAR(100) DEFAULT NULL,
+    source_url TEXT DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_status_created (status, created_at DESC, id DESC)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -67,6 +67,14 @@ router.post(
   videoController.uploadVideos
 );
 
+// 1.5. Embed a video (YouTube / Google Drive) (Admin-only)
+router.post(
+  '/embed',
+  requireAdmin,
+  authLimiter,
+  videoController.embedVideo
+);
+
 // 2. Fetch cursor-paginated video grid
 router.get('/', authenticateToken, videoController.listVideos);
 

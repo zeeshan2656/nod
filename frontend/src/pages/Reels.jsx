@@ -150,6 +150,19 @@ const ReelItem = React.memo(function ReelItem({ reel, isActive, shouldPreload, i
     };
   }, []);
 
+  // View logging for external embeds
+  useEffect(() => {
+    const isExternal = reel.source_type === 'youtube' || reel.source_type === 'gdrive';
+    if (isExternal && isActive && !viewLogged.current) {
+      viewLogged.current = true;
+      api.post(`/reels/${reel.id}/view`).catch(err => {
+        console.error('Failed to log embedded reel view:', err);
+      });
+    } else if (!isActive) {
+      viewLogged.current = false;
+    }
+  }, [isActive, reel.id, reel.source_type]);
+
   const handleToggleMute = (e) => {
     e.stopPropagation();
     if (videoRef.current) {
@@ -203,17 +216,31 @@ const ReelItem = React.memo(function ReelItem({ reel, isActive, shouldPreload, i
         />
       )}
 
-      <div className="reel-video-container" onClick={handleToggleMute} style={{ width: '100%', height: '100%', cursor: 'pointer' }}>
-        <video
-          ref={videoRef}
-          className="reel-video"
-          style={{ width: '100%', height: '100%', objectFit: 'contain', backgroundColor: '#000' }}
-          loop
-          playsInline
-          muted={isMuted}
-          poster={`${API_BASE_URL}/api/reels/${reel.id}/thumbnail`}
-          preload={isActive ? 'auto' : (shouldPreload ? 'auto' : 'none')}
-        />
+      <div className="reel-video-container" onClick={handleToggleMute} style={{ width: '100%', height: '100%', cursor: 'pointer', position: 'relative' }}>
+        {reel.source_type === 'youtube' || reel.source_type === 'gdrive' ? (
+          <iframe
+            src={
+              reel.source_type === 'youtube'
+                ? `https://www.youtube.com/embed/${reel.source_id}?autoplay=${isActive ? 1 : 0}&mute=${isMuted ? 1 : 0}&loop=1&playlist=${reel.source_id}&controls=0&modestbranding=1&rel=0`
+                : `https://drive.google.com/file/d/${reel.source_id}/preview`
+            }
+            title={reel.title}
+            style={{ width: '100%', height: '100%', border: 'none', pointerEvents: 'auto' }}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+          />
+        ) : (
+          <video
+            ref={videoRef}
+            className="reel-video"
+            style={{ width: '100%', height: '100%', objectFit: 'contain', backgroundColor: '#000' }}
+            loop
+            playsInline
+            muted={isMuted}
+            poster={`${API_BASE_URL}/api/reels/${reel.id}/thumbnail`}
+            preload={isActive ? 'auto' : (shouldPreload ? 'auto' : 'none')}
+          />
+        )}
       </div>
 
       <div className="reel-overlay" style={{ pointerEvents: 'none' }}>

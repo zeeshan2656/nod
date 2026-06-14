@@ -54,6 +54,14 @@ router.post(
   reelController.uploadReels
 );
 
+// 1.5. Embed a reel (YouTube Reel / Google Drive Video) (Admin-only)
+router.post(
+  '/embed',
+  requireAdmin,
+  authLimiter,
+  reelController.embedReel
+);
+
 // 2. Fetch cursor-paginated reels feed (TikTok scroll)
 router.get('/', authenticateToken, reelController.listReels);
 

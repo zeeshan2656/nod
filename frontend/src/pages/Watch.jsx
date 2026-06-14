@@ -196,6 +196,7 @@ export default function Watch() {
   // HLS / MP4 Media Binding Lifecycle (incorporating `loading` dependency to resolve blank screen bug)
   useEffect(() => {
     if (loading || !video || !videoRef.current) return;
+    if (video.source_type === 'youtube' || video.source_type === 'gdrive') return;
 
     const videoElement = videoRef.current;
     let videoUrl = '';
@@ -262,6 +263,28 @@ export default function Watch() {
       }
     };
   }, [video?.id, loading]);
+
+  // For external videos, increment view count on mount
+  useEffect(() => {
+    if (!loading && video && (video.source_type === 'youtube' || video.source_type === 'gdrive') && !viewLogged.current) {
+      viewLogged.current = true;
+      const logExternalView = async () => {
+        try {
+          const response = await api.post(`/videos/${id}/view`);
+          if (response.data.status === 'counted') {
+            setVideo(prev => prev ? {
+              ...prev,
+              views_count: response.data.views_count
+            } : null);
+          }
+        } catch (err) {
+          console.error('Failed to log external video view:', err);
+        }
+      };
+      const timer = setTimeout(logExternalView, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [id, loading, video?.id]);
 
   // Auto-hide controls overlay helper
   const handleMouseMove = () => {
@@ -617,14 +640,39 @@ export default function Watch() {
     }
   };
 
-  const renderPlayer = () => (
-    <div 
-      ref={playerWrapperRef}
-      className="player-wrapper" 
-      style={{ position: 'relative', overflow: 'hidden' }}
-      onMouseMove={handleMouseMove}
-      onMouseLeave={() => isPlaying && setShowControls(false)}
-    >
+  const renderPlayer = () => {
+    const isExternal = video && (video.source_type === 'youtube' || video.source_type === 'gdrive');
+
+    if (isExternal) {
+      const embedUrl = video.source_type === 'youtube'
+        ? `https://www.youtube.com/embed/${video.source_id}?autoplay=1&rel=0`
+        : `https://drive.google.com/file/d/${video.source_id}/preview`;
+
+      return (
+        <div 
+          ref={playerWrapperRef}
+          className="player-wrapper" 
+          style={{ position: 'relative', overflow: 'hidden', width: '100%', aspectRatio: '16/9', backgroundColor: '#000' }}
+        >
+          <iframe
+            src={embedUrl}
+            title={video.title}
+            style={{ width: '100%', height: '100%', border: 'none' }}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+            allowFullScreen
+          />
+        </div>
+      );
+    }
+
+    return (
+      <div 
+        ref={playerWrapperRef}
+        className="player-wrapper" 
+        style={{ position: 'relative', overflow: 'hidden' }}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={() => isPlaying && setShowControls(false)}
+      >
       <style>{`
         @keyframes player-spin {
           0% { transform: rotate(0deg); }
@@ -1089,6 +1137,7 @@ export default function Watch() {
       )}
     </div>
   );
+};
 
   const renderInfo = () => (
     <div className="video-details" style={{ borderBottom: 'none', paddingBottom: '8px' }}>

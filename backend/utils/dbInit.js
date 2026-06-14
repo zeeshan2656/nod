@@ -33,6 +33,46 @@ async function initializeDatabase() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
 
+    // Run migrations for embedded videos and reels
+    try {
+      await db.query("ALTER TABLE videos MODIFY COLUMN file_path VARCHAR(255) NULL");
+      await db.query("ALTER TABLE reels MODIFY COLUMN file_path VARCHAR(255) NULL");
+      
+      const checkColumnsQuery = (table) => `SHOW COLUMNS FROM ${table}`;
+      
+      const [videoCols] = await db.query(checkColumnsQuery('videos'));
+      const videoColNames = videoCols.map(c => c.Field);
+      if (!videoColNames.includes('source_type')) {
+        await db.query("ALTER TABLE videos ADD COLUMN source_type VARCHAR(50) DEFAULT 'upload'");
+        console.log("[Migration] Added source_type to videos.");
+      }
+      if (!videoColNames.includes('source_id')) {
+        await db.query("ALTER TABLE videos ADD COLUMN source_id VARCHAR(100) DEFAULT NULL");
+        console.log("[Migration] Added source_id to videos.");
+      }
+      if (!videoColNames.includes('source_url')) {
+        await db.query("ALTER TABLE videos ADD COLUMN source_url TEXT DEFAULT NULL");
+        console.log("[Migration] Added source_url to videos.");
+      }
+
+      const [reelCols] = await db.query(checkColumnsQuery('reels'));
+      const reelColNames = reelCols.map(c => c.Field);
+      if (!reelColNames.includes('source_type')) {
+        await db.query("ALTER TABLE reels ADD COLUMN source_type VARCHAR(50) DEFAULT 'upload'");
+        console.log("[Migration] Added source_type to reels.");
+      }
+      if (!reelColNames.includes('source_id')) {
+        await db.query("ALTER TABLE reels ADD COLUMN source_id VARCHAR(100) DEFAULT NULL");
+        console.log("[Migration] Added source_id to reels.");
+      }
+      if (!reelColNames.includes('source_url')) {
+        await db.query("ALTER TABLE reels ADD COLUMN source_url TEXT DEFAULT NULL");
+        console.log("[Migration] Added source_url to reels.");
+      }
+    } catch (migErr) {
+      console.warn('[Database Migration] Warning or error running table migrations:', migErr.message);
+    }
+
     if (!initialized) {
       console.log('[Database] Tables not found. Auto-initializing database from schema.sql...');
     const schemaPath = path.join(__dirname, '..', 'db', 'schema.sql');

@@ -104,7 +104,7 @@ exports.listReels = async (req, res) => {
       return res.json(cachedData);
     }
 
-    let query = 'SELECT id, title, description, duration, width, height, file_path, views_count, likes_count, status, created_at FROM reels WHERE 1=1';
+    let query = 'SELECT id, title, description, duration, width, height, file_path, views_count, likes_count, status, source_type, source_id, created_at FROM reels WHERE 1=1';
     const params = [];
 
     if (!isAdmin) {
@@ -313,11 +313,30 @@ exports.streamThumbnail = async (req, res) => {
     }
 
     // 2. Fetch reel details
-    const [rows] = await db.query('SELECT file_path, duration, status FROM reels WHERE id = ?', [id]);
+    const [rows] = await db.query('SELECT file_path, duration, status, source_type, source_id FROM reels WHERE id = ?', [id]);
     const reel = rows[0];
 
     if (!reel) {
       return res.status(404).json({ error: 'Reel not found.' });
+    }
+
+    // Handle embedded YouTube thumbnails by redirecting directly
+    if (reel.source_type === 'youtube') {
+      return res.redirect(`https://img.youtube.com/vi/${reel.source_id}/mqdefault.jpg`);
+    }
+
+    // Handle embedded Google Drive thumbnails with a dynamic play vector card
+    if (reel.source_type === 'gdrive') {
+      res.setHeader('Content-Type', 'image/svg+xml');
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+      return res.send(`
+        <svg xmlns="http://www.w3.org/2000/svg" width="360" height="640" viewBox="0 0 360 640" fill="none">
+          <rect width="360" height="640" fill="#1e1e1e"/>
+          <circle cx="180" cy="320" r="40" fill="#ffffff" fill-opacity="0.2"/>
+          <polygon points="170,300 200,320 170,340" fill="#ffffff"/>
+          <text x="180" y="390" fill="#aaaaaa" font-family="Arial" font-size="16" text-anchor="middle">Google Drive Reel</text>
+        </svg>
+      `);
     }
 
     const sourcePath = resolveDiskPath(reel.file_path);
@@ -340,5 +359,98 @@ exports.streamThumbnail = async (req, res) => {
   } catch (err) {
     console.error('Reel frame extraction failed:', err);
     res.status(500).json({ error: 'Could not extract reel thumbnail.' });
+  }
+};
+
+/**
+ * Helper to parse YouTube Video ID from standard and short URLs
+ */
+function parseYouTubeId(url) {
+  if (!url) return null;
+  const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=|shorts\/)([^#\&\?]*).*/;
+  const match = url.match(regExp);
+  return (match && match[2].length === 11) ? match[2] : null;
+}
+
+/**
+ * Helper to parse Google Drive File ID from shared links
+ */
+function parseGoogleDriveId(url) {
+  if (!url) return null;
+  const match1 = url.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+  if (match1) return match1[1];
+  const match2 = url.match(/id=([a-zA-Z0-9_-]+)/);
+  if (match2) return match2[1];
+  return null;
+}
+
+/**
+ * Register embedded reel in database (Admin-only)
+ */
+exports.embedReel = async (req, res) => {
+  const { url, title, description, duration } = req.body;
+
+  if (!url) {
+    return res.status(400).json({ error: 'URL is required.' });
+  }
+
+  const ytId = parseYouTubeId(url);
+  const gdId = parseGoogleDriveId(url);
+
+  let sourceType = '';
+  let sourceId = '';
+
+  if (ytId) {
+    sourceType = 'youtube';
+    sourceId = ytId;
+  } else if (gdId) {
+    sourceType = 'gdrive';
+    sourceId = gdId;
+  } else {
+    return res.status(400).json({ error: 'Unsupported URL format. Only YouTube and Google Drive links are supported.' });
+  }
+
+  let finalTitle = title || '';
+  let finalDuration = parseFloat(duration) || 0;
+
+  // Auto-fetch title from YouTube oEmbed if title is empty
+  if (sourceType === 'youtube' && !finalTitle) {
+    try {
+      const oEmbedUrl = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${sourceId}&format=json`;
+      const response = await fetch(oEmbedUrl);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.title) {
+          finalTitle = data.title;
+        }
+      }
+    } catch (err) {
+      console.warn('oEmbed title fetch failed for reel:', err.message);
+    }
+  }
+
+  if (!finalTitle) {
+    finalTitle = sourceType === 'youtube' ? `YouTube Reel (${sourceId})` : `Google Drive Reel (${sourceId})`;
+  }
+
+  try {
+    const [result] = await db.query(
+      `INSERT INTO reels 
+       (title, description, duration, file_path, status, source_type, source_id, source_url) 
+       VALUES (?, ?, ?, NULL, 'ready', ?, ?, ?)`,
+      [finalTitle, description || '', finalDuration, sourceType, sourceId, url]
+    );
+
+    await cache.del('feed_reels_*');
+
+    res.status(201).json({
+      message: 'Embedded reel added successfully.',
+      reelId: result.insertId,
+      title: finalTitle,
+      sourceType
+    });
+  } catch (err) {
+    console.error('Embed reel database insertion error:', err);
+    res.status(500).json({ error: 'Database error while saving embedded reel.' });
   }
 };

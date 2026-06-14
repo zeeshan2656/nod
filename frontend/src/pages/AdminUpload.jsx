@@ -3,6 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { AuthContext } from '../context/AuthContext';
 import { UploadQueueContext } from '../context/UploadQueueContext';
 import Toast from '../components/Toast';
+import api from '../utils/api';
 
 export default function AdminUpload() {
   const { user, loading: authLoading, isAdmin } = useContext(AuthContext);
@@ -10,6 +11,12 @@ export default function AdminUpload() {
   const navigate = useNavigate();
 
   const [uploadType, setUploadType] = useState('video'); // 'video' or 'reel'
+  const [uploadMethod, setUploadMethod] = useState('file'); // 'file' or 'link'
+  const [embedUrl, setEmbedUrl] = useState('');
+  const [embedTitle, setEmbedTitle] = useState('');
+  const [embedDescription, setEmbedDescription] = useState('');
+  const [embedDuration, setEmbedDuration] = useState('');
+  const [isSubmittingLink, setIsSubmittingLink] = useState(false);
   const [toast, setToast] = useState({ message: '', type: 'success' });
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef(null);
@@ -81,6 +88,41 @@ export default function AdminUpload() {
     }
   };
 
+  const handleLinkSubmit = async (e) => {
+    e.preventDefault();
+    if (!embedUrl) return;
+
+    setIsSubmittingLink(true);
+    try {
+      const endpoint = uploadType === 'video' ? '/videos/embed' : '/reels/embed';
+      const payload = {
+        url: embedUrl,
+        title: embedTitle,
+        description: embedDescription,
+        duration: embedDuration ? parseFloat(embedDuration) : 0
+      };
+
+      const response = await api.post(endpoint, payload);
+      
+      setToast({ 
+        message: `Successfully added embedded ${uploadType}: "${response.data.title || 'Untitled'}"`, 
+        type: 'success' 
+      });
+
+      // Clear link form fields
+      setEmbedUrl('');
+      setEmbedTitle('');
+      setEmbedDescription('');
+      setEmbedDuration('');
+    } catch (err) {
+      console.error(err);
+      const errMsg = err.response?.data?.error || 'Failed to register external link.';
+      setToast({ message: errMsg, type: 'danger' });
+    } finally {
+      setIsSubmittingLink(false);
+    }
+  };
+
   if (authLoading) {
     return <div style={{ textAlign: 'center', padding: '50px', color: 'var(--text-muted)' }}>Loading...</div>;
   }
@@ -96,9 +138,9 @@ export default function AdminUpload() {
 
       <div className="admin-title-row" style={{ marginBottom: '20px' }}>
         <div>
-          <h1 style={{ fontSize: '22px', fontWeight: '700', margin: 0 }}>Upload Media Files</h1>
+          <h1 style={{ fontSize: '22px', fontWeight: '700', margin: 0 }}>Add Media Content</h1>
           <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '4px 0 0 0' }}>
-            Videos are processed sequentially and transcoded to adaptive HLS stream segments.
+            Upload files for local HLS transcoding or insert external YouTube/Google Drive shared links.
           </p>
         </div>
         <Link to="/admin" className="btn btn-secondary" style={{ padding: '8px 16px', fontSize: '13px' }}>
@@ -116,7 +158,7 @@ export default function AdminUpload() {
         {/* Toggle Media Type */}
         <div style={{ marginBottom: '24px' }}>
           <label style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-muted)', display: 'block', marginBottom: '8px' }}>
-            SELECT UPLOAD DESTINATION TYPE
+            SELECT CONTENT TARGET DESTINATION
           </label>
           <div style={{ display: 'flex', gap: '16px' }}>
             <div 
@@ -143,7 +185,7 @@ export default function AdminUpload() {
               />
               <div>
                 <strong style={{ display: 'block', fontSize: '14px', color: '#fff' }}>Landscape Video</strong>
-                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Standard 16:9 / 4:3 videos. Limit: 500MB each.</span>
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Standard 16:9 / 4:3 videos.</span>
               </div>
             </div>
 
@@ -171,63 +213,215 @@ export default function AdminUpload() {
               />
               <div>
                 <strong style={{ display: 'block', fontSize: '14px', color: '#fff' }}>Vertical Reel / Short</strong>
-                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Vertical 9:16 format videos. Limit: 200MB each.</span>
+                <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Vertical 9:16 format videos.</span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Drag & Drop Zone */}
-        <div 
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
-          onClick={triggerSelect}
-          style={{
-            border: `2px dashed ${isDragOver ? 'var(--accent, #3b82f6)' : 'var(--border-color, #333)'}`,
-            backgroundColor: isDragOver ? 'rgba(59, 130, 246, 0.03)' : 'rgba(0,0,0,0.1)',
-            borderRadius: '8px',
-            padding: '48px 20px',
-            textAlign: 'center',
-            cursor: 'pointer',
-            transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-            transform: isDragOver ? 'scale(1.01)' : 'scale(1)',
-            boxSizing: 'border-box'
-          }}
-        >
-          <input 
-            type="file" 
-            ref={fileInputRef}
-            onChange={handleFileChange}
-            multiple 
-            accept="video/*"
-            style={{ display: 'none' }}
-          />
-
-          <div style={{ fontSize: '42px', marginBottom: '16px' }}>
-            📥
-          </div>
-          
-          <h3 style={{ fontSize: '16px', fontWeight: '600', margin: '0 0 8px 0', color: '#fff' }}>
-            Drag and drop video files here
-          </h3>
-          
-          <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: '0 0 16px 0' }}>
-            or click to browse from your device
-          </p>
-
-          <button 
-            type="button" 
-            className="btn btn-primary"
-            style={{ padding: '8px 24px', fontSize: '13px', pointerEvents: 'none' }}
-          >
-            Select Files
-          </button>
-          
-          <div style={{ marginTop: '20px', fontSize: '11px', color: 'var(--text-muted)' }}>
-            Supported formats: MP4, MKV, AVI, MOV, WEBM. Select up to 100+ files for sequential bulk upload.
+        {/* Choose Method Tabs */}
+        <div style={{ marginBottom: '24px' }}>
+          <label style={{ fontSize: '13px', fontWeight: '600', color: 'var(--text-muted)', display: 'block', marginBottom: '8px' }}>
+            CHOOSE ADDITION METHOD
+          </label>
+          <div style={{ display: 'flex', borderBottom: '1px solid var(--border-color)', marginBottom: '16px' }}>
+            <button
+              onClick={() => setUploadMethod('file')}
+              style={{
+                flex: 1,
+                padding: '12px',
+                textAlign: 'center',
+                color: uploadMethod === 'file' ? '#fff' : 'var(--text-muted)',
+                fontWeight: '600',
+                borderBottom: uploadMethod === 'file' ? '2px solid var(--accent, #3b82f6)' : 'none',
+                cursor: 'pointer',
+                backgroundColor: uploadMethod === 'file' ? 'rgba(255, 255, 255, 0.02)' : 'transparent',
+                transition: 'all 0.2s'
+              }}
+            >
+              📂 Upload File
+            </button>
+            <button
+              onClick={() => setUploadMethod('link')}
+              style={{
+                flex: 1,
+                padding: '12px',
+                textAlign: 'center',
+                color: uploadMethod === 'link' ? '#fff' : 'var(--text-muted)',
+                fontWeight: '600',
+                borderBottom: uploadMethod === 'link' ? '2px solid var(--accent, #3b82f6)' : 'none',
+                cursor: 'pointer',
+                backgroundColor: uploadMethod === 'link' ? 'rgba(255, 255, 255, 0.02)' : 'transparent',
+                transition: 'all 0.2s'
+              }}
+            >
+              🔗 External Link
+            </button>
           </div>
         </div>
+
+        {uploadMethod === 'file' ? (
+          /* Drag & Drop Zone */
+          <div 
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            onClick={triggerSelect}
+            style={{
+              border: `2px dashed ${isDragOver ? 'var(--accent, #3b82f6)' : 'var(--border-color, #333)'}`,
+              backgroundColor: isDragOver ? 'rgba(59, 130, 246, 0.03)' : 'rgba(0,0,0,0.1)',
+              borderRadius: '8px',
+              padding: '48px 20px',
+              textAlign: 'center',
+              cursor: 'pointer',
+              transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+              transform: isDragOver ? 'scale(1.01)' : 'scale(1)',
+              boxSizing: 'border-box'
+            }}
+          >
+            <input 
+              type="file" 
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              multiple 
+              accept="video/*"
+              style={{ display: 'none' }}
+            />
+
+            <div style={{ fontSize: '42px', marginBottom: '16px' }}>
+              📥
+            </div>
+            
+            <h3 style={{ fontSize: '16px', fontWeight: '600', margin: '0 0 8px 0', color: '#fff' }}>
+              Drag and drop video files here
+            </h3>
+            
+            <p style={{ fontSize: '13px', color: 'var(--text-muted)', margin: '0 0 16px 0' }}>
+              or click to browse from your device
+            </p>
+
+            <button 
+              type="button" 
+              className="btn btn-primary"
+              style={{ padding: '8px 24px', fontSize: '13px', pointerEvents: 'none' }}
+            >
+              Select Files
+            </button>
+            
+            <div style={{ marginTop: '20px', fontSize: '11px', color: 'var(--text-muted)' }}>
+              Supported formats: MP4, MKV, AVI, MOV, WEBM. Select up to 100+ files for sequential bulk upload.
+            </div>
+          </div>
+        ) : (
+          /* External Link Embed Form */
+          <form onSubmit={handleLinkSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <div>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '6px', color: 'var(--text-muted)' }}>
+                PASTE SHARED LINK (YOUTUBE OR GOOGLE DRIVE)
+              </label>
+              <input 
+                type="url" 
+                required
+                placeholder="https://www.youtube.com/watch?v=... or https://drive.google.com/..." 
+                value={embedUrl}
+                onChange={(e) => setEmbedUrl(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  backgroundColor: 'rgba(0,0,0,0.2)',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '6px',
+                  color: '#fff',
+                  fontSize: '14px'
+                }}
+              />
+            </div>
+            
+            <div>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '6px', color: 'var(--text-muted)' }}>
+                TITLE (OPTIONAL)
+              </label>
+              <input 
+                type="text" 
+                placeholder="Leave blank to auto-detect title from YouTube" 
+                value={embedTitle}
+                onChange={(e) => setEmbedTitle(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  backgroundColor: 'rgba(0,0,0,0.2)',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '6px',
+                  color: '#fff',
+                  fontSize: '14px'
+                }}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '6px', color: 'var(--text-muted)' }}>
+                DESCRIPTION (OPTIONAL)
+              </label>
+              <textarea 
+                rows="3"
+                placeholder="Enter description here..." 
+                value={embedDescription}
+                onChange={(e) => setEmbedDescription(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  backgroundColor: 'rgba(0,0,0,0.2)',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '6px',
+                  color: '#fff',
+                  fontSize: '14px',
+                  resize: 'vertical'
+                }}
+              />
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '6px', color: 'var(--text-muted)' }}>
+                DURATION (OPTIONAL, SECONDS)
+              </label>
+              <input 
+                type="number" 
+                min="0"
+                step="any"
+                placeholder="e.g. 180" 
+                value={embedDuration}
+                onChange={(e) => setEmbedDuration(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  backgroundColor: 'rgba(0,0,0,0.2)',
+                  border: '1px solid var(--border-color)',
+                  borderRadius: '6px',
+                  color: '#fff',
+                  fontSize: '14px'
+                }}
+              />
+            </div>
+
+            <button 
+              type="submit" 
+              className="btn btn-primary"
+              disabled={isSubmittingLink}
+              style={{
+                padding: '12px',
+                fontSize: '14px',
+                fontWeight: '600',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                marginTop: '8px'
+              }}
+            >
+              {isSubmittingLink ? 'Adding Embed...' : 'Add Embedded Media'}
+            </button>
+          </form>
+        )}
 
         {/* Active Uploads Indicator shortcut */}
         {activeCount > 0 && (
@@ -260,3 +454,4 @@ export default function AdminUpload() {
     </div>
   );
 }
+
