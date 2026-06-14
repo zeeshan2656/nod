@@ -221,13 +221,14 @@ const ReelItem = React.memo(function ReelItem({ reel, isActive, shouldPreload, i
           <iframe
             src={
               reel.source_type === 'youtube'
-                ? `https://www.youtube.com/embed/${reel.source_id}?autoplay=${isActive ? 1 : 0}&mute=${isMuted ? 1 : 0}&loop=1&playlist=${reel.source_id}&controls=0&modestbranding=1&rel=0`
+                ? `https://www.youtube-nocookie.com/embed/${reel.source_id}?autoplay=${isActive ? 1 : 0}&mute=${isMuted ? 1 : 0}&loop=1&playlist=${reel.source_id}&controls=0&modestbranding=1&rel=0`
                 : `https://drive.google.com/file/d/${reel.source_id}/preview`
             }
             title={reel.title}
             style={{ width: '100%', height: '100%', border: 'none', pointerEvents: 'auto' }}
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
             allowFullScreen
+            referrerPolicy="strict-origin-when-cross-origin"
           />
         ) : (
           <video

@@ -645,7 +645,7 @@ export default function Watch() {
 
     if (isExternal) {
       const embedUrl = video.source_type === 'youtube'
-        ? `https://www.youtube.com/embed/${video.source_id}?autoplay=1&rel=0`
+        ? `https://www.youtube-nocookie.com/embed/${video.source_id}?autoplay=1&rel=0`
         : `https://drive.google.com/file/d/${video.source_id}/preview`;
 
       return (
@@ -660,6 +660,7 @@ export default function Watch() {
             style={{ width: '100%', height: '100%', border: 'none' }}
             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
             allowFullScreen
+            referrerPolicy="strict-origin-when-cross-origin"
           />
         </div>
       );
