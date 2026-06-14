@@ -16,6 +16,8 @@ export default function AdminUpload() {
   const [embedTitle, setEmbedTitle] = useState('');
   const [embedDescription, setEmbedDescription] = useState('');
   const [embedDuration, setEmbedDuration] = useState('');
+  const [embedThumbnailUrl, setEmbedThumbnailUrl] = useState('');
+  const [isFetchingMetadata, setIsFetchingMetadata] = useState(false);
   const [isSubmittingLink, setIsSubmittingLink] = useState(false);
   const [toast, setToast] = useState({ message: '', type: 'success' });
   const [isDragOver, setIsDragOver] = useState(false);
@@ -27,6 +29,40 @@ export default function AdminUpload() {
       navigate('/login');
     }
   }, [user, authLoading, isAdmin, navigate]);
+
+  // Auto detect external video details on URL change (debounced)
+  useEffect(() => {
+    const isYt = /youtube\.com|youtu\.be/i.test(embedUrl);
+    const isGd = /drive\.google\.com/i.test(embedUrl);
+
+    if (isYt || isGd) {
+      const fetchMetadata = async () => {
+        setIsFetchingMetadata(true);
+        try {
+          const response = await api.get(`/videos/fetch-metadata?url=${encodeURIComponent(embedUrl)}`);
+          const meta = response.data;
+          
+          setEmbedTitle(meta.title || '');
+          setEmbedDuration(meta.duration ? meta.duration.toString() : '');
+          setEmbedThumbnailUrl(meta.thumbnail_url || '');
+          
+          setToast({ message: 'Metadata automatically retrieved from link!', type: 'success' });
+        } catch (err) {
+          console.warn('Auto-fetch metadata failed:', err.message);
+        } finally {
+          setIsFetchingMetadata(false);
+        }
+      };
+
+      const delayTimer = setTimeout(() => {
+        fetchMetadata();
+      }, 700);
+
+      return () => clearTimeout(delayTimer);
+    } else {
+      setEmbedThumbnailUrl('');
+    }
+  }, [embedUrl]);
 
   const handleFilesSelected = async (filesList) => {
     const files = Array.from(filesList);
@@ -99,7 +135,8 @@ export default function AdminUpload() {
         url: embedUrl,
         title: embedTitle,
         description: embedDescription,
-        duration: embedDuration ? parseFloat(embedDuration) : 0
+        duration: embedDuration ? parseFloat(embedDuration) : 0,
+        thumbnail_url: embedThumbnailUrl
       };
 
       const response = await api.post(endpoint, payload);
@@ -114,6 +151,7 @@ export default function AdminUpload() {
       setEmbedTitle('');
       setEmbedDescription('');
       setEmbedDuration('');
+      setEmbedThumbnailUrl('');
     } catch (err) {
       console.error(err);
       const errMsg = err.response?.data?.error || 'Failed to register external link.';
@@ -335,15 +373,42 @@ export default function AdminUpload() {
                   fontSize: '14px'
                 }}
               />
+              {isFetchingMetadata && (
+                <div style={{ marginTop: '6px', fontSize: '12px', color: 'var(--accent, #2196f3)', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ display: 'inline-block', width: '10px', height: '10px', border: '2px solid var(--accent, #2196f3)', borderTop: '2px solid transparent', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                  Detecting and retrieving source metadata, duration and cover references...
+                </div>
+              )}
             </div>
+
+            {embedThumbnailUrl && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', color: 'var(--text-muted)' }}>
+                  EXTERNAL COVER THUMBNAIL
+                </label>
+                <img 
+                  src={embedThumbnailUrl} 
+                  alt="Video Thumbnail Reference" 
+                  style={{ 
+                    width: uploadType === 'reel' ? '120px' : '220px', 
+                    aspectRatio: uploadType === 'reel' ? '9/16' : '16/9', 
+                    objectFit: 'cover', 
+                    borderRadius: '6px', 
+                    border: '1px solid var(--border-color)',
+                    backgroundColor: '#000'
+                  }} 
+                />
+              </div>
+            )}
             
             <div>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '6px', color: 'var(--text-muted)' }}>
-                TITLE (OPTIONAL)
+                TITLE
               </label>
               <input 
                 type="text" 
-                placeholder="Leave blank to auto-detect title from YouTube" 
+                required
+                placeholder="Title will auto-populate" 
                 value={embedTitle}
                 onChange={(e) => setEmbedTitle(e.target.value)}
                 style={{
@@ -382,13 +447,14 @@ export default function AdminUpload() {
 
             <div>
               <label style={{ display: 'block', fontSize: '13px', fontWeight: '600', marginBottom: '6px', color: 'var(--text-muted)' }}>
-                DURATION (OPTIONAL, SECONDS)
+                DURATION (SECONDS)
               </label>
               <input 
                 type="number" 
+                required
                 min="0"
                 step="any"
-                placeholder="e.g. 180" 
+                placeholder="Duration will auto-populate" 
                 value={embedDuration}
                 onChange={(e) => setEmbedDuration(e.target.value)}
                 style={{
@@ -406,7 +472,7 @@ export default function AdminUpload() {
             <button 
               type="submit" 
               className="btn btn-primary"
-              disabled={isSubmittingLink}
+              disabled={isSubmittingLink || isFetchingMetadata}
               style={{
                 padding: '12px',
                 fontSize: '14px',
@@ -454,4 +520,3 @@ export default function AdminUpload() {
     </div>
   );
 }
-

@@ -137,7 +137,7 @@ exports.listVideos = async (req, res) => {
       return res.json(cachedData);
     }
 
-    let query = 'SELECT id, title, duration, thumbnail_position, views_count, likes_count, status, source_type, source_id, created_at FROM videos WHERE 1=1';
+    let query = 'SELECT id, title, duration, thumbnail_position, views_count, likes_count, status, source_type, source_id, thumbnail_url, created_at FROM videos WHERE 1=1';
     const params = [];
 
     // Normal users only see completed transcoded videos
@@ -268,11 +268,16 @@ exports.streamThumbnail = async (req, res) => {
     }
 
     // 2. Fetch video details
-    const [rows] = await db.query('SELECT file_path, duration, thumbnail_position, status, source_type, source_id FROM videos WHERE id = ?', [id]);
+    const [rows] = await db.query('SELECT file_path, duration, thumbnail_position, status, source_type, source_id, thumbnail_url FROM videos WHERE id = ?', [id]);
     const video = rows[0];
 
     if (!video) {
       return res.status(404).json({ error: 'Video not found.' });
+    }
+
+    // If a thumbnail_url reference exists in DB, redirect to it
+    if (video.thumbnail_url) {
+      return res.redirect(video.thumbnail_url);
     }
 
     // Handle embedded YouTube thumbnails by redirecting directly
@@ -680,7 +685,7 @@ function parseGoogleDriveId(url) {
  * Register embedded video in database (Admin-only)
  */
 exports.embedVideo = async (req, res) => {
-  const { url, title, description, duration } = req.body;
+  const { url, title, description, duration, thumbnail_url } = req.body;
 
   if (!url) {
     return res.status(400).json({ error: 'URL is required.' });
@@ -704,6 +709,7 @@ exports.embedVideo = async (req, res) => {
 
   let finalTitle = title || '';
   let finalDuration = parseFloat(duration) || 0;
+  let finalThumbUrl = thumbnail_url || '';
 
   // Auto-fetch title from YouTube oEmbed if oembed title is empty
   if (sourceType === 'youtube' && !finalTitle) {
@@ -715,6 +721,9 @@ exports.embedVideo = async (req, res) => {
         if (data.title) {
           finalTitle = data.title;
         }
+        if (data.thumbnail_url && !finalThumbUrl) {
+          finalThumbUrl = data.thumbnail_url;
+        }
       }
     } catch (err) {
       console.warn('oEmbed title fetch failed for video:', err.message);
@@ -725,12 +734,18 @@ exports.embedVideo = async (req, res) => {
     finalTitle = sourceType === 'youtube' ? `YouTube Video (${sourceId})` : `Google Drive Video (${sourceId})`;
   }
 
+  if (!finalThumbUrl) {
+    finalThumbUrl = sourceType === 'youtube'
+      ? `https://img.youtube.com/vi/${sourceId}/hqdefault.jpg`
+      : `https://drive.google.com/thumbnail?id=${sourceId}&sz=w640`;
+  }
+
   try {
     const [result] = await db.query(
       `INSERT INTO videos 
-       (title, description, duration, aspect_ratio, file_path, status, source_type, source_id, source_url) 
-       VALUES (?, ?, ?, '16:9', NULL, 'ready', ?, ?, ?)`,
-      [finalTitle, description || '', finalDuration, sourceType, sourceId, url]
+       (title, description, duration, aspect_ratio, file_path, status, source_type, source_id, source_url, thumbnail_url) 
+       VALUES (?, ?, ?, '16:9', NULL, 'ready', ?, ?, ?, ?)`,
+      [finalTitle, description || '', finalDuration, sourceType, sourceId, url, finalThumbUrl]
     );
 
     await cache.del('feed_videos_*');
@@ -739,10 +754,133 @@ exports.embedVideo = async (req, res) => {
       message: 'Embedded video added successfully.',
       videoId: result.insertId,
       title: finalTitle,
-      sourceType
+      sourceType,
+      thumbnail_url: finalThumbUrl
     });
   } catch (err) {
     console.error('Embed video database insertion error:', err);
     res.status(500).json({ error: 'Database error while saving embedded video.' });
+  }
+};
+
+/**
+ * Fetch external video/reel metadata (Admin-only)
+ */
+exports.fetchExternalMetadata = async (req, res) => {
+  const { url } = req.query;
+
+  if (!url) {
+    return res.status(400).json({ error: 'URL is required.' });
+  }
+
+  const ytId = parseYouTubeId(url);
+  const gdId = parseGoogleDriveId(url);
+
+  let sourceType = '';
+  let sourceId = '';
+
+  if (ytId) {
+    sourceType = 'youtube';
+    sourceId = ytId;
+  } else if (gdId) {
+    sourceType = 'gdrive';
+    sourceId = gdId;
+  } else {
+    return res.status(400).json({ error: 'Unsupported URL format. Only YouTube and Google Drive links are supported.' });
+  }
+
+  try {
+    let title = '';
+    let duration = 0;
+    let thumbnailUrl = '';
+
+    if (sourceType === 'youtube') {
+      try {
+        const oEmbedUrl = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${sourceId}&format=json`;
+        const response = await fetch(oEmbedUrl);
+        if (response.ok) {
+          const data = await response.json();
+          title = data.title || '';
+          thumbnailUrl = data.thumbnail_url || '';
+        }
+      } catch (oerr) {
+        console.warn('YouTube oEmbed metadata fetch failed:', oerr.message);
+      }
+
+      if (!thumbnailUrl) {
+        thumbnailUrl = `https://img.youtube.com/vi/${sourceId}/hqdefault.jpg`;
+      }
+
+      try {
+        const watchUrl = `https://www.youtube.com/watch?v=${sourceId}`;
+        const response = await fetch(watchUrl);
+        if (response.ok) {
+          const html = await response.text();
+          const durationMatch = html.match(/"lengthSeconds"\s*:\s*"(\d+)"/);
+          if (durationMatch) {
+            duration = parseInt(durationMatch[1], 10);
+          }
+          if (!title) {
+            const titleMatch = html.match(/<title>([^<]+)<\/title>/i);
+            if (titleMatch) {
+              title = titleMatch[1].replace(/\s*-\s*YouTube$/i, '');
+            }
+          }
+        }
+      } catch (derr) {
+        console.warn('YouTube duration scraping failed:', derr.message);
+      }
+
+    } else if (sourceType === 'gdrive') {
+      thumbnailUrl = `https://drive.google.com/thumbnail?id=${sourceId}&sz=w640`;
+
+      try {
+        const viewUrl = `https://drive.google.com/file/d/${sourceId}/view`;
+        const response = await fetch(viewUrl);
+        if (response.ok) {
+          const html = await response.text();
+          const ogTitleMatch = html.match(/<meta\s+property="og:title"\s+content="([^"]+)"/i);
+          if (ogTitleMatch) {
+            title = ogTitleMatch[1];
+          } else {
+            const titleMatch = html.match(/<title>([^<]+)<\/title>/i);
+            if (titleMatch) {
+              title = titleMatch[1].replace(/\s*-\s*Google Drive$/i, '');
+            }
+          }
+        }
+      } catch (gerr) {
+        console.warn('Google Drive page scraping failed:', gerr.message);
+      }
+
+      try {
+        const { spawnSync } = require('child_process');
+        const probeUrl = `https://drive.google.com/uc?export=download&id=${sourceId}`;
+        const result = spawnSync(ffprobePath, [
+          '-v', 'error',
+          '-show_entries', 'format=duration',
+          '-of', 'default=noprint_wrappers=1:nokey=1',
+          probeUrl
+        ], { timeout: 8000 });
+
+        if (result.status === 0) {
+          duration = parseFloat(result.stdout.toString().trim()) || 0;
+        }
+      } catch (ferr) {
+        console.warn('Google Drive ffprobe duration parsing failed:', ferr.message);
+      }
+    }
+
+    res.json({
+      source_type: sourceType,
+      source_id: sourceId,
+      title: title || (sourceType === 'youtube' ? 'YouTube Video' : 'Google Drive Video'),
+      duration: Math.round(duration),
+      thumbnail_url: thumbnailUrl
+    });
+
+  } catch (err) {
+    console.error('Fetch external metadata failed:', err);
+    res.status(500).json({ error: 'Failed to retrieve external video metadata.' });
   }
 };

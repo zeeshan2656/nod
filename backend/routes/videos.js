@@ -75,6 +75,13 @@ router.post(
   videoController.embedVideo
 );
 
+// Fetch external video metadata (Admin-only)
+router.get(
+  '/fetch-metadata',
+  requireAdmin,
+  videoController.fetchExternalMetadata
+);
+
 // 2. Fetch cursor-paginated video grid
 router.get('/', authenticateToken, videoController.listVideos);
 

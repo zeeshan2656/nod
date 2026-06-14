@@ -104,7 +104,7 @@ exports.listReels = async (req, res) => {
       return res.json(cachedData);
     }
 
-    let query = 'SELECT id, title, description, duration, width, height, file_path, views_count, likes_count, status, source_type, source_id, created_at FROM reels WHERE 1=1';
+    let query = 'SELECT id, title, description, duration, width, height, file_path, views_count, likes_count, status, source_type, source_id, thumbnail_url, created_at FROM reels WHERE 1=1';
     const params = [];
 
     if (!isAdmin) {
@@ -313,11 +313,16 @@ exports.streamThumbnail = async (req, res) => {
     }
 
     // 2. Fetch reel details
-    const [rows] = await db.query('SELECT file_path, duration, status, source_type, source_id FROM reels WHERE id = ?', [id]);
+    const [rows] = await db.query('SELECT file_path, duration, status, source_type, source_id, thumbnail_url FROM reels WHERE id = ?', [id]);
     const reel = rows[0];
 
     if (!reel) {
       return res.status(404).json({ error: 'Reel not found.' });
+    }
+
+    // If a thumbnail_url reference exists in DB, redirect to it
+    if (reel.thumbnail_url) {
+      return res.redirect(reel.thumbnail_url);
     }
 
     // Handle embedded YouTube thumbnails by redirecting directly
@@ -388,7 +393,7 @@ function parseGoogleDriveId(url) {
  * Register embedded reel in database (Admin-only)
  */
 exports.embedReel = async (req, res) => {
-  const { url, title, description, duration } = req.body;
+  const { url, title, description, duration, thumbnail_url } = req.body;
 
   if (!url) {
     return res.status(400).json({ error: 'URL is required.' });
@@ -412,6 +417,7 @@ exports.embedReel = async (req, res) => {
 
   let finalTitle = title || '';
   let finalDuration = parseFloat(duration) || 0;
+  let finalThumbUrl = thumbnail_url || '';
 
   // Auto-fetch title from YouTube oEmbed if title is empty
   if (sourceType === 'youtube' && !finalTitle) {
@@ -423,6 +429,9 @@ exports.embedReel = async (req, res) => {
         if (data.title) {
           finalTitle = data.title;
         }
+        if (data.thumbnail_url && !finalThumbUrl) {
+          finalThumbUrl = data.thumbnail_url;
+        }
       }
     } catch (err) {
       console.warn('oEmbed title fetch failed for reel:', err.message);
@@ -433,12 +442,18 @@ exports.embedReel = async (req, res) => {
     finalTitle = sourceType === 'youtube' ? `YouTube Reel (${sourceId})` : `Google Drive Reel (${sourceId})`;
   }
 
+  if (!finalThumbUrl) {
+    finalThumbUrl = sourceType === 'youtube'
+      ? `https://img.youtube.com/vi/${sourceId}/hqdefault.jpg`
+      : `https://drive.google.com/thumbnail?id=${sourceId}&sz=w640`;
+  }
+
   try {
     const [result] = await db.query(
       `INSERT INTO reels 
-       (title, description, duration, file_path, status, source_type, source_id, source_url) 
-       VALUES (?, ?, ?, NULL, 'ready', ?, ?, ?)`,
-      [finalTitle, description || '', finalDuration, sourceType, sourceId, url]
+       (title, description, duration, file_path, status, source_type, source_id, source_url, thumbnail_url) 
+       VALUES (?, ?, ?, NULL, 'ready', ?, ?, ?, ?)`,
+      [finalTitle, description || '', finalDuration, sourceType, sourceId, url, finalThumbUrl]
     );
 
     await cache.del('feed_reels_*');
@@ -447,7 +462,8 @@ exports.embedReel = async (req, res) => {
       message: 'Embedded reel added successfully.',
       reelId: result.insertId,
       title: finalTitle,
-      sourceType
+      sourceType,
+      thumbnail_url: finalThumbUrl
     });
   } catch (err) {
     console.error('Embed reel database insertion error:', err);

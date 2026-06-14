@@ -54,6 +54,10 @@ async function initializeDatabase() {
         await db.query("ALTER TABLE videos ADD COLUMN source_url TEXT DEFAULT NULL");
         console.log("[Migration] Added source_url to videos.");
       }
+      if (!videoColNames.includes('thumbnail_url')) {
+        await db.query("ALTER TABLE videos ADD COLUMN thumbnail_url VARCHAR(255) DEFAULT NULL");
+        console.log("[Migration] Added thumbnail_url to videos.");
+      }
 
       const [reelCols] = await db.query(checkColumnsQuery('reels'));
       const reelColNames = reelCols.map(c => c.Field);
@@ -68,6 +72,10 @@ async function initializeDatabase() {
       if (!reelColNames.includes('source_url')) {
         await db.query("ALTER TABLE reels ADD COLUMN source_url TEXT DEFAULT NULL");
         console.log("[Migration] Added source_url to reels.");
+      }
+      if (!reelColNames.includes('thumbnail_url')) {
+        await db.query("ALTER TABLE reels ADD COLUMN thumbnail_url VARCHAR(255) DEFAULT NULL");
+        console.log("[Migration] Added thumbnail_url to reels.");
       }
     } catch (migErr) {
       console.warn('[Database Migration] Warning or error running table migrations:', migErr.message);

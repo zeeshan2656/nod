@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS videos (
     source_type VARCHAR(50) DEFAULT 'upload', -- 'upload', 'youtube', 'gdrive'
     source_id VARCHAR(100) DEFAULT NULL,
     source_url TEXT DEFAULT NULL,
+    thumbnail_url VARCHAR(255) DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_status_created (status, created_at DESC, id DESC),
     INDEX idx_views (views_count DESC, id DESC)
@@ -49,6 +50,7 @@ CREATE TABLE IF NOT EXISTS reels (
     source_type VARCHAR(50) DEFAULT 'upload', -- 'upload', 'youtube', 'gdrive'
     source_id VARCHAR(100) DEFAULT NULL,
     source_url TEXT DEFAULT NULL,
+    thumbnail_url VARCHAR(255) DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_status_created (status, created_at DESC, id DESC)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
