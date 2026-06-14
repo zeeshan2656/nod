@@ -5,23 +5,21 @@ const fs = require('fs');
 const { getVideoMetadata, extractFrameToBuffer } = require('../utils/ffmpegHelper');
 const transcodeQueue = require('../utils/transcodeQueue');
 
+const UPLOAD_ROOT = process.env.STORAGE_PATH 
+  ? path.resolve(process.env.STORAGE_PATH) 
+  : path.join(__dirname, '..', '..', '..', 'storage');
+const TEMP_DIR = path.join(UPLOAD_ROOT, 'temp');
+const PROCESSED_REELS_DIR = path.join(UPLOAD_ROOT, 'processed', 'reels');
+
 // Helper to resolve absolute or relative database file paths to absolute disk paths
 function resolveDiskPath(filePath) {
   if (!filePath) return '';
   if (filePath.startsWith('/uploads/') || filePath.startsWith('uploads/')) {
-    let relPath = filePath;
-    if (relPath.startsWith('/')) {
-      relPath = relPath.substring(1);
-    }
-    return path.resolve(__dirname, '..', relPath);
+    let relPath = filePath.replace(/^\/?uploads\//, '');
+    return path.resolve(UPLOAD_ROOT, relPath);
   }
   return filePath;
 }
-
-// Folders
-const UPLOAD_ROOT = path.join(__dirname, '..', 'uploads');
-const TEMP_DIR = path.join(UPLOAD_ROOT, 'temp');
-const PROCESSED_REELS_DIR = path.join(UPLOAD_ROOT, 'processed', 'reels');
 
 if (!fs.existsSync(PROCESSED_REELS_DIR)) fs.mkdirSync(PROCESSED_REELS_DIR, { recursive: true });
 

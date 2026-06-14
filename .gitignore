@@ -3,5 +3,6 @@ node_modules/
 dist/
 .DS_Store
 *.log
-uploads/temp/
-uploads/processed/
+# Local media uploads and external permanent storage
+backend/uploads/
+storage/

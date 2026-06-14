@@ -7,7 +7,10 @@ const reelController = require('../controllers/reelController');
 const { requireAdmin, requireAuth, authenticateToken } = require('../middlewares/auth');
 const { authLimiter } = require('../middlewares/rateLimiter');
 
-const tempUploadPath = path.join(__dirname, '..', 'uploads', 'temp');
+const UPLOAD_ROOT = process.env.STORAGE_PATH 
+  ? path.resolve(process.env.STORAGE_PATH) 
+  : path.join(__dirname, '..', '..', '..', 'storage');
+const tempUploadPath = path.join(UPLOAD_ROOT, 'temp');
 if (!fs.existsSync(tempUploadPath)) {
   fs.mkdirSync(tempUploadPath, { recursive: true });
 }

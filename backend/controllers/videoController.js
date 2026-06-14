@@ -5,24 +5,22 @@ const fs = require('fs');
 const { getVideoMetadata, extractFrameToBuffer, ffmpegPath, ffprobePath } = require('../utils/ffmpegHelper');
 const transcodeQueue = require('../utils/transcodeQueue');
 
+const UPLOAD_ROOT = process.env.STORAGE_PATH 
+  ? path.resolve(process.env.STORAGE_PATH) 
+  : path.join(__dirname, '..', '..', '..', 'storage');
+const TEMP_DIR = path.join(UPLOAD_ROOT, 'temp');
+const TEMP_THUMB_DIR = path.join(TEMP_DIR, 'thumbnails');
+const PROCESSED_DIR = path.join(UPLOAD_ROOT, 'processed', 'videos');
+
 // Helper to resolve absolute or relative database file paths to absolute disk paths
 function resolveDiskPath(filePath) {
   if (!filePath) return '';
   if (filePath.startsWith('/uploads/') || filePath.startsWith('uploads/')) {
-    let relPath = filePath;
-    if (relPath.startsWith('/')) {
-      relPath = relPath.substring(1);
-    }
-    return path.resolve(__dirname, '..', relPath);
+    let relPath = filePath.replace(/^\/?uploads\//, '');
+    return path.resolve(UPLOAD_ROOT, relPath);
   }
   return filePath;
 }
-
-// Helpers for folder directories
-const UPLOAD_ROOT = path.join(__dirname, '..', 'uploads');
-const TEMP_DIR = path.join(UPLOAD_ROOT, 'temp');
-const TEMP_THUMB_DIR = path.join(TEMP_DIR, 'thumbnails');
-const PROCESSED_DIR = path.join(UPLOAD_ROOT, 'processed', 'videos');
 
 // Ensure directories exist
 if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });

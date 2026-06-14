@@ -40,8 +40,15 @@ app.use(compression());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Run storage migration on startup to prevent data loss on checkout/cleanups
+const migrateStorage = require('./utils/migrateStorage');
+migrateStorage();
+
 // Serve Uploaded Media Static Assets (with caching & cross-origin headers)
-const uploadsPath = path.join(__dirname, 'uploads');
+const uploadsPath = process.env.STORAGE_PATH 
+  ? path.resolve(process.env.STORAGE_PATH) 
+  : path.join(__dirname, '..', '..', 'storage');
+
 if (!fs.existsSync(uploadsPath)) {
   fs.mkdirSync(uploadsPath, { recursive: true });
 }

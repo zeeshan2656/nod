@@ -150,15 +150,16 @@ exports.getDiagnostics = async (req, res) => {
     // 1. Check database connection
     await db.query('SELECT 1');
 
+    const UPLOAD_ROOT = process.env.STORAGE_PATH 
+      ? path.resolve(process.env.STORAGE_PATH) 
+      : path.join(__dirname, '..', '..', 'storage');
+
     // Helper to resolve paths like in videoController
     const resolveDiskPath = (filePath) => {
       if (!filePath) return '';
       if (filePath.startsWith('/uploads/') || filePath.startsWith('uploads/')) {
-        let relPath = filePath;
-        if (relPath.startsWith('/')) {
-          relPath = relPath.substring(1);
-        }
-        return path.resolve(__dirname, '..', relPath); // note settingController is in backend/controllers, so '..' from here is backend/
+        let relPath = filePath.replace(/^\/?uploads\//, '');
+        return path.resolve(UPLOAD_ROOT, relPath);
       }
       return filePath;
     };
@@ -218,7 +219,7 @@ exports.getDiagnostics = async (req, res) => {
     }
 
     // 4. File uploads temp folder diagnostics
-    const tempDir = path.join(__dirname, '..', 'uploads', 'temp');
+    const tempDir = path.join(UPLOAD_ROOT, 'temp');
     if (fs.existsSync(tempDir)) {
       reportObj.fileStats.tempFolderExists = true;
       const files = fs.readdirSync(tempDir);
@@ -234,7 +235,7 @@ exports.getDiagnostics = async (req, res) => {
       }
     }
 
-    const processedDir = path.join(__dirname, '..', 'uploads', 'processed');
+    const processedDir = path.join(UPLOAD_ROOT, 'processed');
     if (fs.existsSync(processedDir)) {
       reportObj.fileStats.processedFolderExists = true;
     }
