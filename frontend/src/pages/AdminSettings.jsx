@@ -98,6 +98,9 @@ export default function AdminSettings() {
 
       setToast({ message: 'Advertisement updated successfully', type: 'success' });
       setEditingAd(null);
+      if (typeof window.clearAdCache === 'function') {
+        window.clearAdCache();
+      }
     } catch (err) {
       console.error('Failed to save ad placement:', err);
       setToast({ message: 'Failed to update ad placement.', type: 'danger' });
@@ -134,7 +137,7 @@ export default function AdminSettings() {
                 className="form-input"
                 value={siteName}
                 onChange={(e) => setSiteName(e.target.value)}
-                placeholder="e.g. UltraFast Video & Reels"
+                placeholder="e.g. FREE HUB Video & Reels"
                 disabled={savingSettings}
                 required
               />

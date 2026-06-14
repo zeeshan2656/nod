@@ -109,7 +109,7 @@ ON DUPLICATE KEY UPDATE updated_at = CURRENT_TIMESTAMP;
 
 -- Seed default settings
 INSERT INTO settings (`key`, `value`) VALUES
-('site_name', 'UltraFast Video & Reels'),
+('site_name', 'FREE HUB Video & Reels'),
 ('analytics_code', '<!-- Global Analytics Code Placeholder (Google Analytics, Tag Manager, Facebook Pixel) -->')
 ON DUPLICATE KEY UPDATE `value` = VALUES(`value`);
 

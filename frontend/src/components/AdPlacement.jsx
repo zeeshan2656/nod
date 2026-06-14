@@ -5,6 +5,12 @@ import api from '../utils/api';
 let clientAdsCache = null;
 let clientAdsPromise = null;
 
+// Allow clearing cache from external actions (e.g. admin settings page)
+window.clearAdCache = () => {
+  clientAdsCache = null;
+  clientAdsPromise = null;
+};
+
 export default function AdPlacement({ placement, type, code, onAdLoaded, onAdFailed }) {
   const [adCode, setAdCode] = useState(code || null);
 

@@ -163,8 +163,8 @@ function AppLayout() {
           </Link>
         </div>
       ) : (
-        /* Top navbar on Home/other pages, bottom navbar on Watch page */
-        <header className={isWatchPage ? 'header-bottom' : 'header-top'} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative' }}>
+        /* Top navbar on all pages (unified design) */
+        <header className="header-top" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative' }}>
           
           {/* Mobile Hamburger Toggle Menu Button */}
           {!isMobileSearchExpanded && (
@@ -194,7 +194,7 @@ function AppLayout() {
 
           <Link to="/" className={`logo ${isMobileSearchExpanded ? 'mobile-hidden' : ''}`}>
             <div className="logo-dot" />
-            <span>UltraFast</span>
+            <span>FREE HUB</span>
           </Link>
 
           {/* Search bar wrapper */}
@@ -225,26 +225,24 @@ function AppLayout() {
           </div>
 
           <nav className={`nav-links ${isMobileSearchExpanded ? 'mobile-hidden' : ''}`}>
-            {/* Reels Icon on Mobile Landing Page */}
-            {location.pathname === '/' && (
-              <Link 
-                to="/reels" 
-                className="mobile-reels-trigger" 
-                style={{ display: 'none', color: '#fff' }} // Block on mobile in CSS
-                title="Watch Reels"
-              >
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
-                  <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect>
-                  <line x1="7" y1="2" x2="7" y2="22"></line>
-                  <line x1="17" y1="2" x2="17" y2="22"></line>
-                  <line x1="2" y1="12" x2="22" y2="12"></line>
-                  <line x1="2" y1="7" x2="7" y2="7"></line>
-                  <line x1="2" y1="17" x2="7" y2="17"></line>
-                  <line x1="17" y1="17" x2="22" y2="17"></line>
-                  <line x1="17" y1="7" x2="22" y2="7"></line>
-                </svg>
-              </Link>
-            )}
+            {/* Reels Icon on Mobile Header */}
+            <Link 
+              to="/reels" 
+              className="mobile-reels-trigger" 
+              style={{ display: 'none', color: '#fff' }} // Block on mobile in CSS
+              title="Watch Reels"
+            >
+              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
+                <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect>
+                <line x1="7" y1="2" x2="7" y2="22"></line>
+                <line x1="17" y1="2" x2="17" y2="22"></line>
+                <line x1="2" y1="12" x2="22" y2="12"></line>
+                <line x1="2" y1="7" x2="7" y2="7"></line>
+                <line x1="2" y1="17" x2="7" y2="17"></line>
+                <line x1="17" y1="17" x2="22" y2="17"></line>
+                <line x1="17" y1="7" x2="22" y2="7"></line>
+              </svg>
+            </Link>
 
             {/* Mobile Search Icon trigger */}
             <button
@@ -283,7 +281,7 @@ function AppLayout() {
         </header>
       )}
 
-      <main className={isReelsPage ? 'main-reels' : (isWatchPage ? 'main-bottom' : 'main-top')} style={{ padding: '0 0' }}>
+      <main className={isReelsPage ? 'main-reels' : 'main-top'} style={{ padding: '0 0' }}>
         <Suspense fallback={<div style={{ textAlign: 'center', padding: '50px', color: 'var(--text-muted)' }}>Loading...</div>}>
           <Routes>
             <Route path="/" element={<Home />} />
@@ -319,7 +317,7 @@ function AppLayout() {
             <AdPlacement placement="footer_mobile" />
           </div>
           <div>
-            © {new Date().getFullYear()} UltraFast Video Platform. Designed for performance.
+            © {new Date().getFullYear()} FREE HUB Video Platform. Designed for performance.
           </div>
         </footer>
       )}

@@ -54,10 +54,9 @@ exports.uploadVideos = async (req, res) => {
     return res.status(400).json({ error: 'No video files uploaded.' });
   }
 
-  const uploadedRecords = [];
-
   try {
-    for (const file of req.files) {
+    // Process all video metadata extraction and database insertions concurrently to speed up uploads
+    const uploadedRecords = await Promise.all(req.files.map(async (file) => {
       const tempFilePath = file.path;
       
       // 1. Extract metadata via ffprobe
@@ -84,13 +83,13 @@ exports.uploadVideos = async (req, res) => {
         height: metadata.height
       });
 
-      uploadedRecords.push({
+      return {
         id: videoId,
         title,
         duration: metadata.duration,
         status: 'processing'
-      });
-    }
+      };
+    }));
 
     // Invalidate list caches
     await cache.del('feed_videos_*');
@@ -105,7 +104,11 @@ exports.uploadVideos = async (req, res) => {
     // Cleanup any uploaded temp files if error occurred before queuing
     if (req.files) {
       req.files.forEach(f => {
-        if (fs.existsSync(f.path)) fs.unlinkSync(f.path);
+        if (fs.existsSync(f.path)) {
+          try {
+            fs.unlinkSync(f.path);
+          } catch (_) {}
+        }
       });
     }
     res.status(500).json({ error: `Video upload failed: ${err.message}` });
