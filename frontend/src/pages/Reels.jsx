@@ -189,9 +189,10 @@ function ReelItem({ reel, isActive, shouldPreload, isMuted, setIsMuted }) {
           className="reels-top-ad-wrapper"
           style={{
             position: 'absolute',
-            top: '60px',
-            left: '16px',
-            right: '16px',
+            top: '0px',
+            left: '0px',
+            right: '0px',
+            padding: '0px',
             minHeight: '50px',
             zIndex: 100,
             pointerEvents: 'auto',
