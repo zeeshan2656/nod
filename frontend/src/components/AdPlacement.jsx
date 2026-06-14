@@ -1,6 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import api from '../utils/api';
 
+// Memory cache for active ads to optimize client load times and prevent API waterfalls
+let clientAdsCache = null;
+let clientAdsPromise = null;
+
 export default function AdPlacement({ placement, type, code, onAdLoaded, onAdFailed }) {
   const [adCode, setAdCode] = useState(code || null);
 
@@ -9,10 +13,24 @@ export default function AdPlacement({ placement, type, code, onAdLoaded, onAdFai
       setAdCode(code);
       return;
     }
+
+    if (clientAdsCache) {
+      setAdCode(clientAdsCache[placement] || null);
+      return;
+    }
+
     const fetchAds = async () => {
       try {
-        const response = await api.get('/ads');
-        const activeAds = response.data;
+        if (!clientAdsPromise) {
+          clientAdsPromise = api.get('/ads').then((response) => {
+            clientAdsCache = response.data || {};
+            return clientAdsCache;
+          }).catch((err) => {
+            clientAdsPromise = null; // Clear on error to allow retries
+            throw err;
+          });
+        }
+        const activeAds = await clientAdsPromise;
         if (activeAds && activeAds[placement]) {
           setAdCode(activeAds[placement]);
         } else {
@@ -20,6 +38,7 @@ export default function AdPlacement({ placement, type, code, onAdLoaded, onAdFai
         }
       } catch (err) {
         console.error(`Error loading ad placement [${placement}]:`, err);
+        setAdCode(null);
       }
     };
     fetchAds();

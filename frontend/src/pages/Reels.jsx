@@ -74,7 +74,10 @@ function ReelItem({ reel, isActive, shouldPreload, isMuted, setIsMuted }) {
             const hlsInstance = new Hls({
               enableWorker: true,
               lowLatencyMode: true,
-              maxMaxBufferLength: 10
+              backBufferLength: 0,
+              maxBufferLength: 4,
+              maxMaxBufferLength: 8,
+              maxBufferSize: 10 * 1024 * 1024 // 10MB
             });
             hlsRef.current = hlsInstance;
             hlsInstance.loadSource(videoUrl);
@@ -83,7 +86,12 @@ function ReelItem({ reel, isActive, shouldPreload, isMuted, setIsMuted }) {
               if (isActiveRef.current) {
                 videoElement.muted = isMuted; // Sync muted state programmatically
                 if (videoElement.paused) {
-                  videoElement.play().catch(err => console.warn('Autoplay blocked on manifest:', err.message));
+                  videoElement.play().catch(err => {
+                    console.warn('Autoplay blocked on manifest, trying muted autoplay fallback:', err.message);
+                    videoElement.muted = true;
+                    setIsMuted(true);
+                    videoElement.play().catch(e => console.error('Muted autoplay fallback failed on manifest:', e));
+                  });
                 }
               }
             });
@@ -100,7 +108,12 @@ function ReelItem({ reel, isActive, shouldPreload, isMuted, setIsMuted }) {
       if (isActive) {
         videoElement.muted = isMuted; // Always sync muted state before playing!
         if (videoElement.paused) {
-          videoElement.play().catch(err => console.warn('Autoplay blocked:', err.message));
+          videoElement.play().catch(err => {
+            console.warn('Autoplay blocked, trying muted autoplay fallback:', err.message);
+            videoElement.muted = true;
+            setIsMuted(true);
+            videoElement.play().catch(e => console.error('Muted autoplay fallback failed:', e));
+          });
         }
         if (!viewLogged.current) {
           viewLogged.current = true;
@@ -176,13 +189,12 @@ function ReelItem({ reel, isActive, shouldPreload, isMuted, setIsMuted }) {
           top: '60px',
           left: '16px',
           right: '16px',
-          height: '60px',
+          minHeight: '50px',
           zIndex: 100,
           pointerEvents: 'auto',
           display: 'flex',
           justifyContent: 'center',
-          alignItems: 'center',
-          overflow: 'hidden'
+          alignItems: 'center'
         }}>
           <AdPlacement placement="reels_top_overlay" />
         </div>
@@ -339,7 +351,7 @@ export default function Reels() {
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(true);
   const [activeReelIndex, setActiveReelIndex] = useState(0);
-  const [isMuted, setIsMuted] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
 
   const containerRef = useRef(null);
 
@@ -454,9 +466,9 @@ export default function Reels() {
       {items.map((item) => {
         const isActive = activeReelIndex === item.index;
         
-        // Advanced preloading: Preload the next 5 reels in the background
-        const shouldPreload = item.index > activeReelIndex && item.index <= activeReelIndex + 5;
-        const isRendered = item.index >= activeReelIndex - 1 && item.index <= activeReelIndex + 5;
+        // Advanced preloading: Preload the next 2 reels to prevent parallel connection throttling
+        const shouldPreload = item.index > activeReelIndex && item.index <= activeReelIndex + 2;
+        const isRendered = item.index >= activeReelIndex - 1 && item.index <= activeReelIndex + 3;
 
         if (item.type === 'ad') {
           return (

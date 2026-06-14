@@ -215,7 +215,11 @@ export default function Watch() {
         if (Hls.isSupported()) {
           const hlsInstance = new Hls({
             enableWorker: true,
-            lowLatencyMode: true
+            lowLatencyMode: true,
+            backBufferLength: 5,
+            maxBufferLength: 8,
+            maxMaxBufferLength: 15,
+            maxBufferSize: 20 * 1024 * 1024 // 20MB
           });
           hlsRef.current = hlsInstance;
           hlsInstance.loadSource(videoUrl);
