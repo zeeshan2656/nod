@@ -1080,9 +1080,7 @@ export default function Watch() {
 
           {/* 4. Video Ad Placement */}
           {renderAds && (
-            <div style={{ padding: '12px 16px' }}>
-              <AdPlacement placement="watch_page_mobile" />
-            </div>
+            <AdPlacement placement="watch_page_mobile" style={{ padding: '12px 16px' }} />
           )}
 
           {/* 5. Comments Section */}
@@ -1093,7 +1091,7 @@ export default function Watch() {
         </div>
       ) : (
         /* Desktop Layout */
-        <div className="watch-desktop-wrapper" style={{ display: 'flex', gap: '24px', width: '100%', padding: '24px 0' }}>
+        <div className="watch-desktop-wrapper" style={{ display: 'flex', gap: '24px', width: '100%', padding: '0 0 24px 0' }}>
           {/* Main Left Column */}
           <div className="watch-main" style={{ flex: 1, minWidth: 0 }}>
             {/* 1. Video Player */}
@@ -1104,9 +1102,7 @@ export default function Watch() {
 
             {/* 3. Video Ad Placement */}
             {renderAds && (
-              <div style={{ margin: '16px 0' }}>
-                <AdPlacement placement="watch_page_desktop" />
-              </div>
+              <AdPlacement placement="watch_page_desktop" style={{ margin: '16px 0' }} />
             )}
 
             {/* 4. Comments Section */}

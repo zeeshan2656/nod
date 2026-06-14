@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import api, { API_BASE_URL } from '../utils/api';
-import AdPlacement from '../components/AdPlacement';
+import AdPlacement, { isValidAdCode } from '../components/AdPlacement';
 
 export default function Home() {
   const [videos, setVideos] = useState([]);
@@ -72,8 +72,8 @@ export default function Home() {
     if (videoCount > 0 && videoCount % 4 === 0) {
       const adIndex = videoCount / 4; // 1, 2, 3, 4, 5
       const placement = `landing_row_${adIndex}`;
-      // Only inject the ad card if the ad is active and has code
-      if (activeAds && activeAds[placement]) {
+      // Only inject the ad card if the ad is active and has valid code
+      if (activeAds && isValidAdCode(activeAds[placement])) {
         gridItems.push({ type: 'ad', placement, key: `ad-${adIndex}-${page}` });
       }
     }
@@ -131,9 +131,7 @@ export default function Home() {
   return (
     <div style={{ padding: '0 0 20px 0' }}>
       {/* Header Ad Slot */}
-      <div style={{ padding: '0 16px' }}>
-        <AdPlacement placement="header" />
-      </div>
+      <AdPlacement placement="header" style={{ padding: '0 16px', margin: '8px 0' }} />
 
       {loading ? (
         <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>

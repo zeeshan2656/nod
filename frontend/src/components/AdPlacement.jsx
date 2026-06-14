@@ -11,8 +11,31 @@ window.clearAdCache = () => {
   clientAdsPromise = null;
 };
 
-export default function AdPlacement({ placement, type, code, onAdLoaded, onAdFailed }) {
+// Validate that the ad code contains actual executable content and is not a placeholder or comment
+export function isValidAdCode(code) {
+  if (!code) return false;
+  const trimmed = code.trim();
+  if (trimmed === '') return false;
+  
+  // If it's only an HTML comment (e.g. placeholder comments), it's not a running ad
+  if (trimmed.startsWith('<!--') && trimmed.endsWith('-->')) {
+    const withoutComments = trimmed.replace(/<!--[\s\S]*?-->/g, '').trim();
+    if (withoutComments === '') return false;
+  }
+  return true;
+}
+
+export default function AdPlacement({ placement, type, code, style, className, onAdLoaded, onAdFailed, ...props }) {
   const [adCode, setAdCode] = useState(code || null);
+  const [isMobileScreen, setIsMobileScreen] = useState(window.innerWidth < 960);
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobileScreen(window.innerWidth < 960);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     if (code !== undefined) {
@@ -166,12 +189,20 @@ export default function AdPlacement({ placement, type, code, onAdLoaded, onAdFai
     }
   };
 
-  if (!adCode) {
+  if (!isValidAdCode(adCode)) {
+    return null;
+  }
+
+  // Device-specific check:
+  if (placement.includes('desktop') && isMobileScreen) {
+    return null;
+  }
+  if (placement.includes('mobile') && !isMobileScreen) {
     return null;
   }
 
   return (
-    <div className="ad-container-filled" style={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+    <div className={className || "ad-container-filled"} style={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center', ...style }} {...props}>
       <div ref={handleRef} style={{ width: '100%', height: '100%', display: 'flex', justifyContent: 'center', alignItems: 'center' }} />
     </div>
   );

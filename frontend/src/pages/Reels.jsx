@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useContext } from 'react';
 import api, { API_BASE_URL } from '../utils/api';
 import { AuthContext } from '../context/AuthContext';
-import AdPlacement from '../components/AdPlacement';
+import AdPlacement, { isValidAdCode } from '../components/AdPlacement';
 import Toast from '../components/Toast';
 import Hls from 'hls.js';
 
@@ -184,20 +184,22 @@ function ReelItem({ reel, isActive, shouldPreload, isMuted, setIsMuted }) {
       
       {/* Reels Top Overlay Ad (Only mounted and loaded for the active reel, refreshes on swipe) */}
       {isActive && (
-        <div className="reels-top-ad-wrapper" style={{
-          position: 'absolute',
-          top: '60px',
-          left: '16px',
-          right: '16px',
-          minHeight: '50px',
-          zIndex: 100,
-          pointerEvents: 'auto',
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center'
-        }}>
-          <AdPlacement placement="reels_top_overlay" />
-        </div>
+        <AdPlacement 
+          placement="reels_top_overlay" 
+          className="reels-top-ad-wrapper"
+          style={{
+            position: 'absolute',
+            top: '60px',
+            left: '16px',
+            right: '16px',
+            minHeight: '50px',
+            zIndex: 100,
+            pointerEvents: 'auto',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center'
+          }}
+        />
       )}
 
       <div className="reel-video-container" onClick={handleToggleMute} style={{ width: '100%', height: '100%', cursor: 'pointer' }}>
@@ -352,12 +354,23 @@ export default function Reels() {
   const [loading, setLoading] = useState(true);
   const [activeReelIndex, setActiveReelIndex] = useState(0);
   const [isMuted, setIsMuted] = useState(true);
+  const [activeAds, setActiveAds] = useState({});
 
   const containerRef = useRef(null);
 
-  // Load initial reels & disable document scrolling for a clean TikTok-style interface
+  // Load initial reels, active ads & disable document scrolling for clean TikTok-style interface
   useEffect(() => {
     fetchReels();
+    
+    const fetchActiveAds = async () => {
+      try {
+        const response = await api.get('/ads');
+        setActiveAds(response.data || {});
+      } catch (err) {
+        console.error('Failed to load active ads for reels:', err);
+      }
+    };
+    fetchActiveAds();
 
     const originalOverflow = document.body.style.overflow;
     const originalHtmlOverflow = document.documentElement.style.overflow;
@@ -454,10 +467,12 @@ export default function Reels() {
     reelCounter++;
 
     if (reelCounter > 0 && reelCounter % 3 === 0) {
-      items.push({
-        type: 'ad',
-        index: items.length
-      });
+      if (activeAds && isValidAdCode(activeAds['reel_feed'])) {
+        items.push({
+          type: 'ad',
+          index: items.length
+        });
+      }
     }
   });
 
@@ -472,14 +487,13 @@ export default function Reels() {
 
         if (item.type === 'ad') {
           return (
-            <div 
+            <AdPlacement 
               key={`ad-${item.index}`}
+              placement="reel_feed"
               className="reel-item-wrapper reel-ad-card" 
               data-index={item.index}
               style={{ display: 'flex', flexDirection: 'column', padding: '20px', justifyContent: 'center' }}
-            >
-              <AdPlacement placement="reel_feed" />
-            </div>
+            />
           );
         }
 

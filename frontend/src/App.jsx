@@ -310,12 +310,8 @@ function AppLayout() {
           alignItems: 'center',
           gap: '12px'
         }}>
-          <div className="footer-ad-desktop" style={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
-            <AdPlacement placement="footer_desktop" />
-          </div>
-          <div className="footer-ad-mobile" style={{ width: '100%', display: 'flex', justifyContent: 'center' }}>
-            <AdPlacement placement="footer_mobile" />
-          </div>
+          <AdPlacement placement="footer_desktop" className="footer-ad-desktop" style={{ width: '100%', display: 'flex', justifyContent: 'center', margin: '8px 0' }} />
+          <AdPlacement placement="footer_mobile" className="footer-ad-mobile" style={{ width: '100%', display: 'flex', justifyContent: 'center', margin: '8px 0' }} />
           <div>
             © {new Date().getFullYear()} FREE HUB Video Platform. Designed for performance.
           </div>

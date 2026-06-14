@@ -304,7 +304,7 @@ main.main-reels {
   .watch-container {
     flex-direction: row;
     gap: 24px;
-    padding: 24px 16px;
+    padding: 12px 16px;
   }
   .watch-main {
     flex: 1;
@@ -1077,15 +1077,5 @@ main.main-reels {
   color: #fff;
 }
 
-/* Footer Device-specific Ads visibility toggles */
-@media (min-width: 960px) {
-  .footer-ad-mobile {
-    display: none !important;
-  }
-}
-@media (max-width: 959px) {
-  .footer-ad-desktop {
-    display: none !important;
-  }
-}
+/* Footer ads device visibility is now handled programmatically via AdPlacement.jsx */
 
