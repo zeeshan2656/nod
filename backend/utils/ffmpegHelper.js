@@ -116,7 +116,8 @@ function extractFrameToBuffer(filePath, timestamp) {
       '-i', filePath,
       '-threads', '2',
       '-vframes', '1',
-      '-vf', 'scale=640:-1',
+      '-vf', 'scale=1280:-1',
+      '-q:v', '2',
       '-f', 'image2',
       '-'
     ]);

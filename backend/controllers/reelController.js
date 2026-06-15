@@ -325,9 +325,25 @@ exports.streamThumbnail = async (req, res) => {
       return res.redirect(reel.thumbnail_url);
     }
 
-    // Handle embedded YouTube thumbnails by redirecting directly
+    // Handle embedded YouTube thumbnails by redirecting directly (HD maxresdefault fallback to hqdefault)
     if (reel.source_type === 'youtube') {
-      return res.redirect(`https://img.youtube.com/vi/${reel.source_id}/mqdefault.jpg`);
+      const ytCacheKey = `yt_thumb_quality_${reel.source_id}`;
+      let thumbUrl = await cache.get(ytCacheKey);
+      if (!thumbUrl) {
+        try {
+          const maxresUrl = `https://img.youtube.com/vi/${reel.source_id}/maxresdefault.jpg`;
+          const headRes = await globalThis.fetch(maxresUrl, { method: 'HEAD' });
+          if (headRes.status === 200) {
+            thumbUrl = maxresUrl;
+          } else {
+            thumbUrl = `https://img.youtube.com/vi/${reel.source_id}/hqdefault.jpg`;
+          }
+        } catch (err) {
+          thumbUrl = `https://img.youtube.com/vi/${reel.source_id}/hqdefault.jpg`;
+        }
+        await cache.set(ytCacheKey, thumbUrl, 86400 * 30); // 30 days cache
+      }
+      return res.redirect(thumbUrl);
     }
 
     // Handle embedded Google Drive thumbnails with a dynamic play vector card
