@@ -69,6 +69,7 @@ export default function Watch() {
   const lastTapRef = useRef({ time: 0, x: 0 });
   const controlsTimeoutRef = useRef(null);
   const playerWrapperRef = useRef(null);
+  const isHoveringControls = useRef(false);
 
   // Responsive Layout detection resize listener
   useEffect(() => {
@@ -287,30 +288,72 @@ export default function Watch() {
   }, [id, loading, video?.id]);
 
   // Auto-hide controls overlay helper
-  const handleMouseMove = () => {
+  const triggerControlsActivity = (timeoutMs = 3000) => {
     setShowControls(true);
     if (controlsTimeoutRef.current) {
       clearTimeout(controlsTimeoutRef.current);
     }
-    controlsTimeoutRef.current = setTimeout(() => {
-      if (isPlaying) {
-        setShowControls(false);
-      }
-    }, 2500);
+
+    const isVideoEnded = videoRef.current?.ended || (currentTime >= duration && duration > 0);
+    const isPausedOrEnded = !isPlaying || isVideoEnded;
+
+    if (!isHoveringControls.current && !isPausedOrEnded) {
+      controlsTimeoutRef.current = setTimeout(() => {
+        if (isPlaying && !isHoveringControls.current) {
+          setShowControls(false);
+        }
+      }, timeoutMs);
+    }
   };
+
+  const handleMouseMove = () => {
+    triggerControlsActivity(3000);
+  };
+
+  const handleMouseLeave = () => {
+    if (isPlaying) {
+      if (controlsTimeoutRef.current) {
+        clearTimeout(controlsTimeoutRef.current);
+      }
+      controlsTimeoutRef.current = setTimeout(() => {
+        if (isPlaying && !isHoveringControls.current) {
+          setShowControls(false);
+        }
+      }, 1000); // Hide in 1 second when mouse leaves player wrapper
+    }
+  };
+
+  useEffect(() => {
+    if (isPlaying) {
+      triggerControlsActivity(3000);
+    } else {
+      setShowControls(true);
+      if (controlsTimeoutRef.current) {
+        clearTimeout(controlsTimeoutRef.current);
+      }
+    }
+  }, [isPlaying]);
 
   useEffect(() => {
     return () => {
       if (controlsTimeoutRef.current) clearTimeout(controlsTimeoutRef.current);
     };
-  }, [isPlaying]);
+  }, []);
 
   // Playback Control Handlers
   const handlePlayPause = () => {
     if (videoRef.current) {
-      if (videoRef.current.paused) {
+      const isVideoEnded = videoRef.current.ended || (currentTime >= duration && duration > 0);
+      if (isVideoEnded) {
+        videoRef.current.currentTime = 0;
+        setCurrentTime(0);
+        videoRef.current.play().catch(err => console.warn('Replay failed:', err));
+        setIsPlaying(true);
+        triggerControlsActivity(3000);
+      } else if (videoRef.current.paused) {
         videoRef.current.play().catch(err => console.warn('Playback block:', err.message));
         setIsPlaying(true);
+        triggerControlsActivity(3000);
       } else {
         videoRef.current.pause();
         setIsPlaying(false);
@@ -325,6 +368,7 @@ export default function Watch() {
       if (wasPlaying) {
         videoRef.current.play().catch(err => console.warn('Play resume failed after seek:', err));
       }
+      triggerControlsActivity(3000);
     }
   };
 
@@ -335,6 +379,7 @@ export default function Watch() {
       if (wasPlaying) {
         videoRef.current.play().catch(err => console.warn('Play resume failed after seek:', err));
       }
+      triggerControlsActivity(3000);
     }
   };
 
@@ -437,8 +482,24 @@ export default function Watch() {
         showOverlayIndicator('forward');
       }
     } else {
-      // Single tap toggles play
-      handlePlayPause();
+      // Single tap
+      const isVideoEnded = videoRef.current?.ended || (currentTime >= duration && duration > 0);
+      if (isMobile && isPlaying && !isVideoEnded) {
+        // Toggle controls visibility on mobile when playing
+        setShowControls(prev => {
+          const next = !prev;
+          if (next) {
+            triggerControlsActivity(3000);
+          } else {
+            if (controlsTimeoutRef.current) {
+              clearTimeout(controlsTimeoutRef.current);
+            }
+          }
+          return next;
+        });
+      } else {
+        handlePlayPause();
+      }
     }
     lastTapRef.current = { time: now, x: clickX };
   };
@@ -642,6 +703,9 @@ export default function Watch() {
 
   const renderPlayer = () => {
     const isExternal = video && (video.source_type === 'youtube' || video.source_type === 'gdrive');
+    const isVideoEnded = videoRef.current?.ended || (currentTime >= duration && duration > 0);
+    const isVideoPausedOrEnded = !isPlaying || isVideoEnded;
+    const controlsActive = showControls || isVideoPausedOrEnded;
 
     if (isExternal) {
       const embedUrl = video.source_type === 'youtube'
@@ -672,7 +736,7 @@ export default function Watch() {
         className="player-wrapper" 
         style={{ position: 'relative', overflow: 'hidden' }}
         onMouseMove={handleMouseMove}
-        onMouseLeave={() => isPlaying && setShowControls(false)}
+        onMouseLeave={handleMouseLeave}
       >
       <style>{`
         @keyframes player-spin {
@@ -709,15 +773,15 @@ export default function Watch() {
         style={{ cursor: 'pointer' }}
       />
 
-      {/* Centered Stop/Pause Indicator Overlay when video is stopped/paused */}
-      {!isPlaying && !showOverlayAd && (
+      {/* Centered Play/Pause/Replay Action Overlay */}
+      {!showOverlayAd && (
         <div 
           onClick={handlePlayPause}
           style={{
             position: 'absolute',
             top: '50%',
             left: '50%',
-            transform: 'translate(-50%, -50%)',
+            transform: `translate(-50%, -50%) ${controlsActive ? 'scale(1)' : 'scale(0.95)'}`,
             backgroundColor: 'rgba(15, 15, 15, 0.75)',
             width: '68px',
             height: '68px',
@@ -729,8 +793,9 @@ export default function Watch() {
             zIndex: 15,
             border: '2px solid rgba(255, 255, 255, 0.3)',
             boxShadow: '0 8px 24px rgba(0, 0, 0, 0.6)',
-            transition: 'all 0.2s ease',
-            pointerEvents: 'auto'
+            transition: 'opacity 0.25s ease-in-out, transform 0.25s ease-in-out, background-color 0.2s, border-color 0.2s',
+            opacity: controlsActive ? 1 : 0,
+            pointerEvents: controlsActive ? 'auto' : 'none'
           }}
           onMouseEnter={(e) => {
             e.currentTarget.style.backgroundColor = 'rgba(15, 15, 15, 0.9)';
@@ -740,15 +805,23 @@ export default function Watch() {
           onMouseLeave={(e) => {
             e.currentTarget.style.backgroundColor = 'rgba(15, 15, 15, 0.75)';
             e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.3)';
-            e.currentTarget.style.transform = 'translate(-50%, -50%) scale(1)';
+            e.currentTarget.style.transform = `translate(-50%, -50%) ${controlsActive ? 'scale(1)' : 'scale(0.95)'}`;
           }}
         >
-          {/* Dynamic Center Play / Stop SVG */}
-          {(videoRef.current?.ended || (currentTime >= duration && duration > 0)) ? (
+          {/* Dynamic Center Play / Pause / Replay Icon */}
+          {isVideoEnded ? (
+            /* Replay Icon (Rotate CCW circular arrow) */
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
+              <polyline points="1 4 1 10 7 10"/>
+              <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+            </svg>
+          ) : isPlaying ? (
+            /* Pause Icon */
             <svg width="28" height="28" viewBox="0 0 24 24" fill="#ffffff" style={{ display: 'block' }}>
-              <rect x="6" y="6" width="12" height="12" rx="1.5" />
+              <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
             </svg>
           ) : (
+            /* Play Icon */
             <svg width="28" height="28" viewBox="0 0 24 24" fill="#ffffff" style={{ marginLeft: '3px', display: 'block' }}>
               <path d="M8 5v14l11-7z"/>
             </svg>
@@ -815,10 +888,26 @@ export default function Watch() {
           gap: '4px',
           zIndex: 20,
           transition: 'opacity 0.25s ease-in-out',
-          opacity: showControls ? 1 : 0,
-          pointerEvents: showControls ? 'auto' : 'none'
+          opacity: controlsActive ? 1 : 0,
+          pointerEvents: controlsActive ? 'auto' : 'none'
         }}
-        onClick={(e) => e.stopPropagation()} // Stop propagation from triggering Play toggle on tap
+        onMouseEnter={() => {
+          isHoveringControls.current = true;
+          if (controlsTimeoutRef.current) {
+            clearTimeout(controlsTimeoutRef.current);
+          }
+          setShowControls(true);
+        }}
+        onMouseLeave={() => {
+          isHoveringControls.current = false;
+          if (isPlaying) {
+            triggerControlsActivity(3000);
+          }
+        }}
+        onClick={(e) => {
+          e.stopPropagation(); // Stop propagation from triggering Play toggle on tap
+          triggerControlsActivity(3000);
+        }}
       >
         {/* Scrubber track */}
         <input
