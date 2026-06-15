@@ -155,12 +155,12 @@ export default function AdminEditVideo() {
                 Select Cover Thumbnail (Frame Position)
               </label>
               <span style={{ fontSize: '11px', color: 'var(--text-muted)', display: 'block', marginBottom: '10px' }}>
-                We extract 10 temporary frames throughout the video. Choose one as the thumbnail cover. No thumbnail image files will be permanently saved.
+                We extract 30 temporary frames throughout the video. Choose one as the thumbnail cover. No thumbnail image files will be permanently saved.
               </span>
 
               {loadingThumbs ? (
                 <div style={{ padding: '20px 0', color: 'var(--text-muted)', fontSize: '12px' }}>
-                  ⏳ Extracting 10 frames from video file using FFmpeg... Please wait.
+                  ⏳ Extracting 30 frames from video file using FFmpeg... Please wait.
                 </div>
               ) : thumbError ? (
                 <div style={{ color: 'var(--danger)', fontSize: '13px', padding: '12px', border: '1px solid rgba(244,67,54,0.3)', backgroundColor: 'rgba(244, 67, 54, 0.05)', borderRadius: '2px' }}>

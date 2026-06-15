@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS videos (
     aspect_ratio VARCHAR(20) DEFAULT '16:9',
     file_size BIGINT NOT NULL DEFAULT 0,
     file_path VARCHAR(255) DEFAULT NULL, -- Path to master.m3u8 or temp original
-    thumbnail_position INT NOT NULL DEFAULT 1, -- 1 to 10
+    thumbnail_position INT NOT NULL DEFAULT 1, -- 1 to 30
     views_count INT DEFAULT 0,
     likes_count INT DEFAULT 0,
     status VARCHAR(20) DEFAULT 'processing', -- 'processing', 'ready', 'failed'

@@ -308,9 +308,9 @@ exports.streamThumbnail = async (req, res) => {
     }
 
     // Calculate timestamp for the selected thumbnail position
-    // Range: 1 to 10
-    const pos = Math.min(Math.max(video.thumbnail_position || 1, 1), 10);
-    const timestamp = (video.duration / 11) * pos;
+    // Range: 1 to 30
+    const pos = Math.min(Math.max(video.thumbnail_position || 1, 1), 30);
+    const timestamp = (video.duration / 31) * pos;
 
     // 3. Extract the frame using FFmpeg stream
     const imgBuffer = await extractFrameToBuffer(sourcePath, timestamp);
@@ -397,9 +397,9 @@ exports.getTemporaryThumbnails = async (req, res) => {
     const thumbUrls = [];
     const { spawnSync } = require('child_process');
 
-    // Extract 10 frames sequentially
-    for (let i = 1; i <= 10; i++) {
-      const timestamp = (video.duration / 11) * i;
+    // Extract 30 frames sequentially
+    for (let i = 1; i <= 30; i++) {
+      const timestamp = (video.duration / 31) * i;
       const outFileName = `${i}.jpg`;
       const outFilePath = path.join(videoTempDir, outFileName);
 
