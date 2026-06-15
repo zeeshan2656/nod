@@ -133,6 +133,49 @@ function AppLayout() {
           >
             Trending
           </NavLink>
+          {isAdmin && (
+            <NavLink 
+              to="/admin" 
+              onClick={() => setIsSidebarOpen(false)} 
+              className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}
+              style={{ fontSize: '15px', fontWeight: '600', padding: '10px 14px', borderRadius: '4px', display: 'block', color: 'var(--text-color, #fff)' }}
+            >
+              Admin
+            </NavLink>
+          )}
+          {user ? (
+            <button 
+              onClick={() => {
+                logout();
+                setIsSidebarOpen(false);
+              }} 
+              className="sidebar-nav-item"
+              style={{ 
+                fontSize: '15px', 
+                fontWeight: '600', 
+                padding: '10px 14px', 
+                borderRadius: '4px', 
+                display: 'block', 
+                width: '100%', 
+                textAlign: 'left', 
+                color: 'var(--text-color, #fff)', 
+                cursor: 'pointer', 
+                border: 'none', 
+                background: 'none' 
+              }}
+            >
+              Sign Out
+            </button>
+          ) : (
+            <NavLink 
+              to="/login" 
+              onClick={() => setIsSidebarOpen(false)} 
+              className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}
+              style={{ fontSize: '15px', fontWeight: '600', padding: '10px 14px', borderRadius: '4px', display: 'block', color: 'var(--text-color, #fff)' }}
+            >
+              Sign In
+            </NavLink>
+          )}
         </nav>
       </div>
 
