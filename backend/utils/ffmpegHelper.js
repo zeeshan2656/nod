@@ -55,12 +55,12 @@ function gcd(a, b) {
 /**
  * Gets video metadata using ffprobe
  * @param {string} filePath - Absolute path to video file
- * @returns {Promise<object>} - Resolves to duration, width, height, aspect_ratio, file_size
+ * @returns {Promise<object>} - Resolves to duration, width, height, aspect_ratio, file_size, videoCodec, audioCodec, isWebReady
  */
 function getVideoMetadata(filePath) {
   return new Promise((resolve, reject) => {
     // Escape path for Windows
-    const cmd = `"${ffprobePath}" -v error -select_streams v:0 -show_entries stream=width,height,r_frame_rate -show_entries format=duration,size -of json "${filePath}"`;
+    const cmd = `"${ffprobePath}" -v error -show_entries stream=codec_name,codec_type,width,height,r_frame_rate -show_entries format=duration,size,format_name -of json "${filePath}"`;
     
     exec(cmd, (error, stdout, stderr) => {
       if (error) {
@@ -69,17 +69,21 @@ function getVideoMetadata(filePath) {
       
       try {
         const data = JSON.parse(stdout);
-        const stream = data.streams && data.streams[0];
-        const format = data.format;
+        const streams = data.streams || [];
+        const videoStream = streams.find(s => s.codec_type === 'video');
+        const audioStream = streams.find(s => s.codec_type === 'audio');
+        const format = data.format || {};
         
-        if (!stream) {
+        if (!videoStream) {
           return reject(new Error('No video stream found in the file.'));
         }
 
         const duration = parseFloat(format.duration || 0);
         const fileSize = parseInt(format.size || 0, 10);
-        const width = parseInt(stream.width || 0, 10);
-        const height = parseInt(stream.height || 0, 10);
+        const width = parseInt(videoStream.width || 0, 10);
+        const height = parseInt(videoStream.height || 0, 10);
+        const videoCodec = (videoStream.codec_name || '').toLowerCase();
+        const audioCodec = (audioStream ? audioStream.codec_name : '').toLowerCase();
         
         // Calculate aspect ratio
         let aspect_ratio = '16:9';
@@ -88,12 +92,19 @@ function getVideoMetadata(filePath) {
           aspect_ratio = `${width / divisor}:${height / divisor}`;
         }
 
+        // Web-ready if H.264 video with AAC/MP3 or no audio
+        const isWebReady = ['h264', 'avc1'].includes(videoCodec) && 
+                           (!audioCodec || ['aac', 'mp3', 'opus'].includes(audioCodec));
+
         resolve({
           duration,
           width,
           height,
           aspect_ratio,
-          file_size: fileSize
+          file_size: fileSize,
+          videoCodec,
+          audioCodec,
+          isWebReady
         });
       } catch (err) {
         reject(new Error(`Failed to parse ffprobe metadata: ${err.message}`));
@@ -110,17 +121,33 @@ function getVideoMetadata(filePath) {
  */
 function extractFrameToBuffer(filePath, timestamp) {
   return new Promise((resolve, reject) => {
+    let targetFile = filePath;
+    const fileDir = path.dirname(filePath);
+
+    // If target is master.m3u8, resolve to video.mp4 or playlist.m3u8 in same folder
+    if (filePath.endsWith('master.m3u8')) {
+      const mp4Candidate = path.join(fileDir, 'video.mp4');
+      const playlistCandidate = path.join(fileDir, 'playlist.m3u8');
+      if (fs.existsSync(mp4Candidate)) {
+        targetFile = mp4Candidate;
+      } else if (fs.existsSync(playlistCandidate)) {
+        targetFile = playlistCandidate;
+      }
+    }
+
     // Fast-seek input seek (-ss before -i) for ultra-fast frame extraction (under 100ms)
     const ffmpegProcess = spawn(ffmpegPath, [
       '-ss', timestamp.toFixed(3),
-      '-i', filePath,
+      '-i', targetFile,
       '-threads', '2',
       '-vframes', '1',
       '-vf', 'scale=1280:-1',
       '-q:v', '2',
       '-f', 'image2',
       '-'
-    ]);
+    ], {
+      cwd: fileDir
+    });
 
     const chunks = [];
     const errChunks = [];
@@ -175,79 +202,75 @@ function runProcess(cmd, args) {
 }
 
 /**
- * Transcodes a video file to adaptive HLS playlists (360p, 540p, 720p)
+ * Fast-prepares a video for instant playback and HLS streaming
+ * Eliminates redundant multi-pass re-encoding.
  * @param {string} inputPath - Original video filepath
  * @param {string} outputDir - Directory to store HLS output
  * @param {number} height - Height of source video
+ * @param {boolean} isWebReady - True if video already has H264+AAC web codecs
  * @returns {Promise<string>} - Resolves with master playlist content / filename
  */
-async function transcodeToHLS(inputPath, outputDir, height) {
+async function transcodeToHLS(inputPath, outputDir, height = 720, isWebReady = false) {
   // Ensure output directories exist
   if (!fs.existsSync(outputDir)) {
     fs.mkdirSync(outputDir, { recursive: true });
   }
 
-  const resolutions = [];
-  
-  // Choose resolutions to transcode based on original source height
-  // Always include 360p as base quality
-  resolutions.push({ name: '360p', height: 360, width: 640, bitrate: '800k', maxrate: '856k', bufsize: '1200k' });
+  const playlistPath = path.join(outputDir, 'playlist.m3u8');
+  const segmentPattern = path.join(outputDir, 'segment_%03d.ts');
+  const fastStartMp4 = path.join(outputDir, 'video.mp4');
 
-  if (height >= 540) {
-    resolutions.push({ name: '540p', height: 540, width: 960, bitrate: '1400k', maxrate: '1498k', bufsize: '2100k' });
-  }
-  
-  if (height >= 720) {
-    resolutions.push({ name: '720p', height: 720, width: 1280, bitrate: '2800k', maxrate: '2996k', bufsize: '4200k' });
-  }
+  if (isWebReady) {
+    // 1. Instant stream-copy faststart MP4 (0 re-encoding, takes ~0.2s)
+    try {
+      await runProcess(ffmpegPath, [
+        '-y',
+        '-i', inputPath,
+        '-c', 'copy',
+        '-movflags', '+faststart',
+        fastStartMp4
+      ]);
+    } catch (_) {}
 
-  // Sequentially transcode each profile to prevent CPU overload
-  for (const profile of resolutions) {
-    const profileDir = path.join(outputDir, profile.name);
-    if (!fs.existsSync(profileDir)) {
-      fs.mkdirSync(profileDir, { recursive: true });
-    }
-
-    const playlistPath = path.join(profileDir, 'playlist.m3u8');
-    const segmentPattern = path.join(profileDir, 'segment_%03d.ts');
-
-    const args = [
+    // 2. Instant stream-copy HLS segmentation (cuts at keyframes, 0 CPU re-encoding overhead)
+    await runProcess(ffmpegPath, [
       '-y',
       '-i', inputPath,
-      '-threads', '2',
-      '-vf', `scale=-2:${profile.height}`, // Scale, maintaining aspect ratio divisible by 2
+      '-c', 'copy',
+      '-f', 'hls',
+      '-hls_time', '4',
+      '-hls_playlist_type', 'vod',
+      '-hls_segment_filename', segmentPattern,
+      playlistPath
+    ]);
+  } else {
+    // Single-pass ultrafast transcode (replaces slow multi-pass loops)
+    await runProcess(ffmpegPath, [
+      '-y',
+      '-i', inputPath,
+      '-threads', '0',
       '-c:v', 'libx264',
+      '-preset', 'ultrafast',
+      '-crf', '23',
       '-pix_fmt', 'yuv420p',
-      '-preset', 'veryfast', // Fast transcoding
-      '-b:v', profile.bitrate,
-      '-maxrate', profile.maxrate,
-      '-bufsize', profile.bufsize,
-      '-g', '60', // Keyframe every 60 frames (2 seconds at 30fps)
-      '-sc_threshold', '0',
       '-c:a', 'aac',
       '-b:a', '128k',
       '-ac', '2',
       '-f', 'hls',
-      '-hls_time', '6', // 6-second segments
+      '-hls_time', '4',
       '-hls_playlist_type', 'vod',
       '-hls_segment_filename', segmentPattern,
       playlistPath
-    ];
-
-    await runProcess(ffmpegPath, args);
+    ]);
   }
 
-  // Create Master Playlist index
-  let masterContent = '#EXTM3U\n#EXT-X-VERSION:3\n';
-  
-  for (const profile of resolutions) {
-    let bandwidth = 800000;
-    if (profile.name === '540p') bandwidth = 1400000;
-    if (profile.name === '720p') bandwidth = 2800000;
-
-    masterContent += `#EXT-X-STREAM-INF:BANDWIDTH=${bandwidth},RESOLUTION=${profile.width}x${profile.height}\n`;
-    masterContent += `${profile.name}/playlist.m3u8\n`;
-  }
+  // Create clean Master Playlist index
+  const masterContent = 
+`#EXTM3U
+#EXT-X-VERSION:3
+#EXT-X-STREAM-INF:BANDWIDTH=2500000,RESOLUTION=1280x${height || 720}
+playlist.m3u8
+`;
 
   const masterPath = path.join(outputDir, 'master.m3u8');
   fs.writeFileSync(masterPath, masterContent);

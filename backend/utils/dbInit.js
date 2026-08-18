@@ -33,10 +33,9 @@ async function initializeDatabase() {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
     `);
 
-    // Run migrations for embedded videos and reels
+    // Run migrations for embedded videos
     try {
       await db.query("ALTER TABLE videos MODIFY COLUMN file_path VARCHAR(255) NULL");
-      await db.query("ALTER TABLE reels MODIFY COLUMN file_path VARCHAR(255) NULL");
       
       const checkColumnsQuery = (table) => `SHOW COLUMNS FROM ${table}`;
       
@@ -58,60 +57,41 @@ async function initializeDatabase() {
         await db.query("ALTER TABLE videos ADD COLUMN thumbnail_url VARCHAR(255) DEFAULT NULL");
         console.log("[Migration] Added thumbnail_url to videos.");
       }
-
-      const [reelCols] = await db.query(checkColumnsQuery('reels'));
-      const reelColNames = reelCols.map(c => c.Field);
-      if (!reelColNames.includes('source_type')) {
-        await db.query("ALTER TABLE reels ADD COLUMN source_type VARCHAR(50) DEFAULT 'upload'");
-        console.log("[Migration] Added source_type to reels.");
-      }
-      if (!reelColNames.includes('source_id')) {
-        await db.query("ALTER TABLE reels ADD COLUMN source_id VARCHAR(100) DEFAULT NULL");
-        console.log("[Migration] Added source_id to reels.");
-      }
-      if (!reelColNames.includes('source_url')) {
-        await db.query("ALTER TABLE reels ADD COLUMN source_url TEXT DEFAULT NULL");
-        console.log("[Migration] Added source_url to reels.");
-      }
-      if (!reelColNames.includes('thumbnail_url')) {
-        await db.query("ALTER TABLE reels ADD COLUMN thumbnail_url VARCHAR(255) DEFAULT NULL");
-        console.log("[Migration] Added thumbnail_url to reels.");
-      }
     } catch (migErr) {
       console.warn('[Database Migration] Warning or error running table migrations:', migErr.message);
     }
 
     if (!initialized) {
       console.log('[Database] Tables not found. Auto-initializing database from schema.sql...');
-    const schemaPath = path.join(__dirname, '..', 'db', 'schema.sql');
-    if (!fs.existsSync(schemaPath)) {
-      console.warn('[Database] schema.sql file not found at:', schemaPath);
-      return;
-    }
-
-    const sql = fs.readFileSync(schemaPath, 'utf8');
-    
-    // Split statements, filtering out comments and Hostinger-unsupported CREATE DATABASE / USE commands
-    const statements = sql
-      .split(';')
-      .map(stmt => stmt.trim())
-      .filter(stmt => {
-        const lower = stmt.toLowerCase();
-        return (
-          stmt.length > 0 &&
-          !lower.startsWith('--') &&
-          !lower.startsWith('create database') &&
-          !lower.startsWith('use ')
-        );
-      });
-
-    for (const statement of statements) {
-      try {
-        await db.query(statement);
-      } catch (stmtErr) {
-        console.error('[Database] Failed to execute statement:', statement, '\nError:', stmtErr.message);
+      const schemaPath = path.join(__dirname, '..', 'db', 'schema.sql');
+      if (!fs.existsSync(schemaPath)) {
+        console.warn('[Database] schema.sql file not found at:', schemaPath);
+        return;
       }
-    }
+
+      const sql = fs.readFileSync(schemaPath, 'utf8');
+      
+      // Split statements, filtering out comments and Hostinger-unsupported CREATE DATABASE / USE commands
+      const statements = sql
+        .split(';')
+        .map(stmt => stmt.trim())
+        .filter(stmt => {
+          const lower = stmt.toLowerCase();
+          return (
+            stmt.length > 0 &&
+            !lower.startsWith('--') &&
+            !lower.startsWith('create database') &&
+            !lower.startsWith('use ')
+          );
+        });
+
+      for (const statement of statements) {
+        try {
+          await db.query(statement);
+        } catch (stmtErr) {
+          console.error('[Database] Failed to execute statement:', statement, '\nError:', stmtErr.message);
+        }
+      }
       console.log('[Database] Database tables initialized successfully!');
     }
 
@@ -126,8 +106,7 @@ async function initializeDatabase() {
       ['watch_page_mobile', 'Watch Page Mobile Ad', '<!-- Watch Page Mobile Ad Placeholder -->', 0],
       ['footer_desktop', 'Footer Desktop Ad', '<!-- Footer Desktop Ad Placeholder -->', 0],
       ['footer_mobile', 'Footer Mobile Ad', '<!-- Footer Mobile Ad Placeholder -->', 0],
-      ['video_overlay', 'Video Overlay Ad', '<!-- Video Overlay Ad Placeholder -->', 0],
-      ['reels_top_overlay', 'Reels Top Overlay Ad', '<!-- Reels Top Overlay Ad Placeholder -->', 0]
+      ['video_overlay', 'Video Overlay Ad', '<!-- Video Overlay Ad Placeholder -->', 0]
     ];
 
     for (const [placement, name, code, is_active] of adPlacementsToSeed) {
@@ -147,11 +126,20 @@ async function initializeDatabase() {
       'footer',
       'sidebar',
       'video_top',
-      'video_bottom',
-      'reel_feed'
+      'reel_feed',
+      'reels_top_overlay'
     ];
     for (const placement of legacyPlacements) {
       await db.query("DELETE FROM ads WHERE placement = ?", [placement]);
+    }
+
+    // Always guarantee default admin user exists
+    const [existingAdmin] = await db.query("SELECT id FROM users WHERE username = 'admin'");
+    if (existingAdmin.length === 0) {
+      await db.query(
+        "INSERT INTO users (username, password, role) VALUES ('admin', '$2a$10$JX94dBn5hwIW..0ZMW1fd.kl4Ih25As511f6TFZp5TOEVwo9qyMGG', 'admin')"
+      );
+      console.log("[Database] Seeded default admin user (admin / admin123).");
     }
   } catch (err) {
     console.error('[Database] Failed to auto-initialize database:', err.message);

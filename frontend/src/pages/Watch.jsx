@@ -96,12 +96,18 @@ export default function Watch() {
 
   // Load video details, related videos, and overlay ad configuration
   useEffect(() => {
+    let isCancelled = false;
     const fetchWatchData = async () => {
       setLoading(true);
       try {
-        // Fetch all data in parallel to avoid waterfalls and minimize load times
-        const [videoRes, relatedRes, activeAds] = await Promise.all([
-          api.get(`/videos/${id}`),
+        // 1. Fetch main video first for instant player rendering and streaming
+        const videoRes = await api.get(`/videos/${id}`);
+        if (isCancelled) return;
+        setVideo(videoRes.data);
+        setLoading(false); // Player starts immediately!
+
+        // 2. Fetch related videos and overlay ad asynchronously in background
+        Promise.all([
           api.get(`/videos/${id}/related`).catch(err => {
             console.error('Failed to load related videos:', err);
             return { data: [] };
@@ -110,34 +116,36 @@ export default function Watch() {
             console.error('Failed to load overlay ad:', err);
             return {};
           })
-        ]);
+        ]).then(([relatedRes, activeAds]) => {
+          if (isCancelled) return;
+          setRelatedVideos(relatedRes.data || []);
+          if (activeAds && activeAds['video_overlay']) {
+            setOverlayAdCode(activeAds['video_overlay']);
+            setShowOverlayAd(true);
+            setAdLoading(true);
+            setAdVisible(false);
+            setCountdown(15);
+            overlayTriggered.current = { pre: true, mid1: false, mid2: false };
+          } else {
+            setOverlayAdCode(null);
+            setShowOverlayAd(false);
+            setAdLoading(false);
+            setAdVisible(false);
+            overlayTriggered.current = { pre: false, mid1: false, mid2: false };
+          }
+        });
 
-        setVideo(videoRes.data);
-        setRelatedVideos(relatedRes.data || []);
-
-        if (activeAds && activeAds['video_overlay']) {
-          setOverlayAdCode(activeAds['video_overlay']);
-          setShowOverlayAd(true);
-          setAdLoading(true);
-          setAdVisible(false);
-          setCountdown(15);
-          overlayTriggered.current = { pre: true, mid1: false, mid2: false };
-        } else {
-          setOverlayAdCode(null);
-          setShowOverlayAd(false);
-          setAdLoading(false);
-          setAdVisible(false);
-          overlayTriggered.current = { pre: false, mid1: false, mid2: false };
-        }
       } catch (err) {
-        console.error('Failed to load watch data:', err);
-        setToast({ message: 'Error loading video.', type: 'danger' });
-      } finally {
-        setLoading(false);
+        if (!isCancelled) {
+          console.error('Failed to load watch data:', err);
+          setToast({ message: 'Error loading video.', type: 'danger' });
+          setLoading(false);
+        }
       }
     };
 
     fetchWatchData();
+    return () => { isCancelled = true; };
   }, [id, user]);
 
   // Lazy fetch comments only when opened
@@ -194,7 +202,7 @@ export default function Watch() {
     }
   };
 
-  // HLS / MP4 Media Binding Lifecycle (incorporating `loading` dependency to resolve blank screen bug)
+  // HLS / MP4 Media Binding Lifecycle
   useEffect(() => {
     if (loading || !video || !videoRef.current) return;
     if (video.source_type === 'youtube' || video.source_type === 'gdrive') return;
@@ -216,46 +224,69 @@ export default function Watch() {
 
     const playOrBlockAutoplay = () => {
       if (!showOverlayAdRef.current) {
-        videoElement.play().catch(err => console.warn('Autoplay blocked:', err.message));
-        setIsPlaying(true);
+        const playPromise = videoElement.play();
+        if (playPromise !== undefined) {
+          playPromise
+            .then(() => setIsPlaying(true))
+            .catch(err => console.warn('Autoplay blocked:', err.message));
+        }
       } else {
         videoElement.pause();
         setIsPlaying(false);
       }
     };
 
-    if (video.status === 'ready') {
+    const isHls = videoUrl.includes('.m3u8');
+
+    if (isHls) {
       if (videoElement.canPlayType('application/vnd.apple.mpegurl')) {
         videoElement.src = videoUrl;
-        playOrBlockAutoplay();
-      } else {
-        if (Hls.isSupported()) {
-          const hlsInstance = new Hls({
-            enableWorker: true,
-            lowLatencyMode: true,
-            backBufferLength: 5,
-            maxBufferLength: 8,
-            maxMaxBufferLength: 15,
-            maxBufferSize: 20 * 1024 * 1024 // 20MB
-          });
-          hlsRef.current = hlsInstance;
-          hlsInstance.loadSource(videoUrl);
-          hlsInstance.attachMedia(videoElement);
-          hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
-            playOrBlockAutoplay();
-          });
-        } else {
-          videoElement.src = videoUrl;
+        videoElement.addEventListener('loadedmetadata', playOrBlockAutoplay, { once: true });
+      } else if (Hls.isSupported()) {
+        const hlsInstance = new Hls({
+          enableWorker: true,
+          lowLatencyMode: true,
+          startLevel: -1,
+          capLevelToPlayerSize: true,
+          maxBufferLength: 10,
+          maxMaxBufferLength: 20,
+          maxBufferSize: 25 * 1024 * 1024,
+          backBufferLength: 5,
+          nudgeOffset: 0.1,
+          nudgeMaxRetry: 3,
+          maxBufferHole: 0.3
+        });
+        hlsRef.current = hlsInstance;
+        hlsInstance.loadSource(videoUrl);
+        hlsInstance.attachMedia(videoElement);
+        hlsInstance.on(Hls.Events.MANIFEST_PARSED, () => {
           playOrBlockAutoplay();
-        }
+        });
+        hlsInstance.on(Hls.Events.ERROR, (event, data) => {
+          if (data.fatal) {
+            switch (data.type) {
+              case Hls.ErrorTypes.NETWORK_ERROR:
+                hlsInstance.startLoad();
+                break;
+              case Hls.ErrorTypes.MEDIA_ERROR:
+                hlsInstance.recoverMediaError();
+                break;
+              default:
+                hlsInstance.destroy();
+                break;
+            }
+          }
+        });
+      } else {
+        videoElement.src = videoUrl;
+        playOrBlockAutoplay();
       }
     } else {
+      // Direct MP4 / FastStart stream with native Range requests
       videoElement.src = videoUrl;
-      playOrBlockAutoplay();
+      videoElement.preload = 'auto';
+      videoElement.addEventListener('loadedmetadata', playOrBlockAutoplay, { once: true });
     }
-
-    // Force load the video element
-    videoElement.load();
 
     return () => {
       if (hlsRef.current) {
@@ -769,7 +800,7 @@ export default function Watch() {
         onSeeking={() => setIsBuffering(true)}
         onSeeked={() => setIsBuffering(false)}
         onCanPlay={() => setIsBuffering(false)}
-        onLoadStart={() => setIsBuffering(true)}
+        onLoadedData={() => setIsBuffering(false)}
         style={{ cursor: 'pointer' }}
       />
 

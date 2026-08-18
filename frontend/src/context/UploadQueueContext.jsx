@@ -334,7 +334,7 @@ export function UploadQueueProvider({ children }) {
   }
 
   // Add files bulk selection API
-  async function addToQueue(files, uploadType) {
+  async function addToQueue(files, uploadType = 'video') {
     setIsQueueVisible(true);
     setIsMinimized(false);
 
@@ -357,7 +357,7 @@ export function UploadQueueProvider({ children }) {
           width: meta.width,
           height: meta.height,
           thumbnailUrl: meta.thumbnailUrl,
-          uploadType, // 'video' or 'reel'
+          uploadType: 'video',
           status: 'queued',
           progress: 0,
           uploadedBytes: 0,

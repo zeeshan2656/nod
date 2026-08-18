@@ -35,26 +35,6 @@ CREATE TABLE IF NOT EXISTS videos (
     INDEX idx_views (views_count DESC, id DESC)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 3. Reels table
-CREATE TABLE IF NOT EXISTS reels (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    title VARCHAR(255) DEFAULT NULL,
-    description TEXT,
-    duration FLOAT NOT NULL DEFAULT 0.0,
-    width INT NOT NULL DEFAULT 0,
-    height INT NOT NULL DEFAULT 0,
-    file_path VARCHAR(255) DEFAULT NULL,
-    views_count INT DEFAULT 0,
-    likes_count INT DEFAULT 0,
-    status VARCHAR(20) DEFAULT 'processing',
-    source_type VARCHAR(50) DEFAULT 'upload', -- 'upload', 'youtube', 'gdrive'
-    source_id VARCHAR(100) DEFAULT NULL,
-    source_url TEXT DEFAULT NULL,
-    thumbnail_url VARCHAR(255) DEFAULT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_status_created (status, created_at DESC, id DESC)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
 -- 3.5. Upload Queue table (for resuming chunk uploads)
 CREATE TABLE IF NOT EXISTS upload_queue (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -78,7 +58,7 @@ CREATE TABLE IF NOT EXISTS upload_queue (
 CREATE TABLE IF NOT EXISTS likes (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
-    item_type ENUM('video', 'reel', 'comment') NOT NULL,
+    item_type ENUM('video', 'comment') NOT NULL,
     item_id INT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uq_user_item (user_id, item_type, item_id),
@@ -90,7 +70,6 @@ CREATE TABLE IF NOT EXISTS likes (
 CREATE TABLE IF NOT EXISTS comments (
     id INT AUTO_INCREMENT PRIMARY KEY,
     video_id INT NULL,
-    reel_id INT NULL,
     user_id INT NOT NULL,
     parent_id INT NULL, -- For nested replies
     content TEXT NOT NULL,
@@ -98,14 +77,13 @@ CREATE TABLE IF NOT EXISTS comments (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (parent_id) REFERENCES comments(id) ON DELETE CASCADE,
-    INDEX idx_video_comments (video_id, parent_id, created_at ASC),
-    INDEX idx_reel_comments (reel_id, parent_id, created_at ASC)
+    INDEX idx_video_comments (video_id, parent_id, created_at ASC)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 6. Ad Placements table
 CREATE TABLE IF NOT EXISTS ads (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    placement VARCHAR(50) NOT NULL UNIQUE, -- 'landing_row_1', 'landing_row_2', 'landing_row_3', 'landing_row_4', 'landing_row_5', 'watch_page_desktop', 'watch_page_mobile', 'footer_desktop', 'footer_mobile', 'video_overlay'
+    placement VARCHAR(50) NOT NULL UNIQUE,
     name VARCHAR(100) NOT NULL,
     code TEXT NOT NULL,
     is_active TINYINT DEFAULT 1,
@@ -130,13 +108,12 @@ INSERT INTO ads (placement, name, code, is_active) VALUES
 ('watch_page_mobile', 'Watch Page Mobile Ad', '<!-- Watch Page Mobile Ad Placeholder -->', 0),
 ('footer_desktop', 'Footer Desktop Ad', '<!-- Footer Desktop Ad Placeholder -->', 0),
 ('footer_mobile', 'Footer Mobile Ad', '<!-- Footer Mobile Ad Placeholder -->', 0),
-('video_overlay', 'Video Overlay Ad', '<!-- Video Overlay Ad Placeholder -->', 0),
-('reels_top_overlay', 'Reels Top Overlay Ad', '<!-- Reels Top Overlay Ad Placeholder -->', 0)
+('video_overlay', 'Video Overlay Ad', '<!-- Video Overlay Ad Placeholder -->', 0)
 ON DUPLICATE KEY UPDATE updated_at = CURRENT_TIMESTAMP;
 
 -- Seed default settings
 INSERT INTO settings (`key`, `value`) VALUES
-('site_name', 'FREE HUB Video & Reels'),
+('site_name', 'FREE HUB Video Platform'),
 ('analytics_code', '<!-- Global Analytics Code Placeholder (Google Analytics, Tag Manager, Facebook Pixel) -->')
 ON DUPLICATE KEY UPDATE `value` = VALUES(`value`);
 

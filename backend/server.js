@@ -52,14 +52,20 @@ const uploadsPath = process.env.STORAGE_PATH
 if (!fs.existsSync(uploadsPath)) {
   fs.mkdirSync(uploadsPath, { recursive: true });
 }
+const mediaStoragePath = path.join(uploadsPath, 'media');
+if (!fs.existsSync(mediaStoragePath)) {
+  fs.mkdirSync(mediaStoragePath, { recursive: true });
+}
 
 app.use('/uploads', (req, res, next) => {
-  // Add cross-origin headers for media streaming and CDN requests
+  // Add cross-origin headers for media streaming, Range requests, and CDN
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Range, Content-Type, Accept');
+  res.setHeader('Accept-Ranges', 'bytes');
   
-  // Cache HLS TS segments and manifests aggressively
-  if (req.path.endsWith('.ts')) {
+  // Cache media segments aggressively
+  if (req.path.endsWith('.ts') || req.path.endsWith('.mp4') || req.path.endsWith('.webm')) {
     res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
   } else if (req.path.endsWith('.m3u8')) {
     res.setHeader('Cache-Control', 'public, max-age=2, must-revalidate'); // Manifests are hot-updated
@@ -67,19 +73,17 @@ app.use('/uploads', (req, res, next) => {
     res.setHeader('Cache-Control', 'public, max-age=86400'); // Default static cache (24 hours)
   }
   next();
-}, express.static(uploadsPath));
+}, express.static(uploadsPath, { acceptRanges: true, maxAge: '1d', etag: true }));
 
 // Mount REST API Routes
 const authRoutes = require('./routes/auth');
 const videoRoutes = require('./routes/videos');
-const reelRoutes = require('./routes/reels');
 const commentRoutes = require('./routes/comments');
 const adRoutes = require('./routes/ads');
 const settingRoutes = require('./routes/settings');
 
 app.use('/api/auth', authRoutes);
 app.use('/api/videos', videoRoutes);
-app.use('/api/reels', reelRoutes);
 app.use('/api/comments', commentRoutes);
 app.use('/api/ads', adRoutes);
 app.use('/api/settings', settingRoutes);
@@ -142,7 +146,7 @@ const initializeDatabase = require('./utils/dbInit');
 initializeDatabase().then(() => {
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`===================================================`);
-    console.log(` ULTRA-FAST VIDEO & REELS API RUNNING ON PORT ${PORT}`);
+    console.log(` ULTRA-FAST VIDEO API RUNNING ON PORT ${PORT}`);
     console.log(` Environment: ${process.env.NODE_ENV || 'development'}`);
     console.log(`===================================================`);
   });

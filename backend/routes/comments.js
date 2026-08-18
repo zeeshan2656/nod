@@ -3,7 +3,7 @@ const router = express.Router();
 const commentController = require('../controllers/commentController');
 const { requireAuth, authenticateToken } = require('../middlewares/auth');
 
-// 1. Fetch comments tree for a video/reel (Public API)
+// 1. Fetch comments tree for a video (Public API)
 router.get('/', commentController.getComments);
 
 // 2. Add a new comment or reply (Authenticated/Anonymous allowed)

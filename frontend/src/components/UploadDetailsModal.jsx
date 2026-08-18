@@ -222,8 +222,8 @@ export default function UploadDetailsModal() {
                     </span>
                   </div>
                   <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                    <span style={{ color: '#888' }}>Type</span>
-                    <span style={{ color: '#fff', fontWeight: '500', textTransform: 'capitalize' }}>{activeDetailsItem.uploadType}</span>
+                    <span style={{ color: '#888' }}>Format</span>
+                    <span style={{ color: '#fff', fontWeight: '500' }}>Video</span>
                   </div>
                 </div>
               </div>
