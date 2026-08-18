@@ -47,7 +47,7 @@ migrateStorage();
 // Serve Uploaded Media Static Assets (with caching & cross-origin headers)
 const uploadsPath = process.env.STORAGE_PATH 
   ? path.resolve(process.env.STORAGE_PATH) 
-  : path.join(__dirname, '..', '..', 'storage');
+  : path.join(__dirname, 'storage');
 
 if (!fs.existsSync(uploadsPath)) {
   fs.mkdirSync(uploadsPath, { recursive: true });

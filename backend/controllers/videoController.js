@@ -7,7 +7,7 @@ const transcodeQueue = require('../utils/transcodeQueue');
 
 const UPLOAD_ROOT = process.env.STORAGE_PATH 
   ? path.resolve(process.env.STORAGE_PATH) 
-  : path.join(__dirname, '..', '..', '..', 'storage');
+  : path.join(__dirname, '..', 'storage');
 const TEMP_DIR = path.join(UPLOAD_ROOT, 'temp');
 const TEMP_THUMB_DIR = path.join(TEMP_DIR, 'thumbnails');
 const PROCESSED_DIR = path.join(UPLOAD_ROOT, 'processed', 'videos');

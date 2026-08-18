@@ -14,7 +14,7 @@ const memoryUpload = multer({ storage: multer.memoryStorage() });
 // Configure Multer Disk Storage for Video Uploads
 const UPLOAD_ROOT = process.env.STORAGE_PATH 
   ? path.resolve(process.env.STORAGE_PATH) 
-  : path.join(__dirname, '..', '..', '..', 'storage');
+  : path.join(__dirname, '..', 'storage');
 const tempUploadPath = path.join(UPLOAD_ROOT, 'temp');
 if (!fs.existsSync(tempUploadPath)) {
   fs.mkdirSync(tempUploadPath, { recursive: true });

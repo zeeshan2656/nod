@@ -444,7 +444,7 @@ export default function AdminUpload() {
               <div style={{ fontWeight: '600', color: '#93c5fd', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
                 <span>📁 Direct Server Upload Path:</span>
                 <code style={{ backgroundColor: 'rgba(0,0,0,0.4)', padding: '2px 6px', borderRadius: '4px', color: '#60a5fa', fontSize: '11px' }}>
-                  storage/media/
+                  backend/storage/media/
                 </code>
               </div>
               <div>
@@ -665,7 +665,7 @@ export default function AdminUpload() {
                     <div style={{ fontSize: '36px', marginBottom: '12px' }}>📂</div>
                     <h4 style={{ fontSize: '15px', color: '#fff', margin: '0 0 6px 0' }}>No unposted server media found</h4>
                     <p style={{ fontSize: '12px', color: 'var(--text-muted)', margin: '0 auto', maxWidth: '420px' }}>
-                      To add videos directly, copy video files into <code style={{ color: '#60a5fa' }}>storage/media/</code> on your hosting/server and click <strong>Scan Folder</strong>.
+                      To add videos directly, copy video files into <code style={{ color: '#60a5fa' }}>backend/storage/media/</code> on your hosting/server and click <strong>Scan Folder</strong>.
                     </p>
                   </div>
                 ) : (

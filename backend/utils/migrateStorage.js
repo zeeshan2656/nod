@@ -20,7 +20,7 @@ function migrateStorage() {
   const localUploadsPath = path.join(__dirname, '..', 'uploads');
   const targetStoragePath = process.env.STORAGE_PATH 
     ? path.resolve(process.env.STORAGE_PATH) 
-    : path.join(__dirname, '..', '..', '..', 'storage');
+    : path.join(__dirname, '..', 'storage');
 
   // Skip if target and source resolve to the same path to prevent infinite loops
   if (path.resolve(localUploadsPath) === path.resolve(targetStoragePath)) {
