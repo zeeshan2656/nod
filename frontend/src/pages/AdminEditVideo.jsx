@@ -185,9 +185,13 @@ export default function AdminEditVideo() {
                           alt={`frame-${thumb.position}`}
                           loading="lazy"
                         />
-                        <span className="thumb-option-badge">
-                          Frame {thumb.position}
-                        </span>
+                        {isSelected && (
+                          <div className="thumb-selected-check">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                              <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
