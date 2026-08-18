@@ -2,17 +2,16 @@ const db = require('../config/db');
 const cache = require('../config/cache');
 
 /**
- * Fetch all comments for a video/reel and structure them into a nested reply tree in-memory
+ * Fetch all comments for a video and structure them into a nested reply tree in-memory
  */
 exports.getComments = async (req, res) => {
   const videoId = req.query.video_id ? parseInt(req.query.video_id) : null;
-  const reelId = req.query.reel_id ? parseInt(req.query.reel_id) : null;
 
-  if (!videoId && !reelId) {
-    return res.status(400).json({ error: 'Either video_id or reel_id must be provided.' });
+  if (!videoId) {
+    return res.status(400).json({ error: 'video_id must be provided.' });
   }
 
-  const cacheKey = videoId ? `comments_video_${videoId}` : `comments_reel_${reelId}`;
+  const cacheKey = `comments_video_${videoId}`;
 
   try {
     const cachedComments = await cache.get(cacheKey);
@@ -20,23 +19,14 @@ exports.getComments = async (req, res) => {
       return res.json(cachedComments);
     }
 
-    let query = `
+    const query = `
       SELECT c.*, COALESCE(u.username, 'Guest') as username 
       FROM comments c
       LEFT JOIN users u ON c.user_id = u.id
-      WHERE 
+      WHERE c.video_id = ?
+      ORDER BY c.created_at ASC
     `;
-    const params = [];
-
-    if (videoId) {
-      query += ' c.video_id = ? ';
-      params.push(videoId);
-    } else {
-      query += ' c.reel_id = ? ';
-      params.push(reelId);
-    }
-
-    query += ' ORDER BY c.created_at ASC ';
+    const params = [videoId];
 
     const [rows] = await db.query(query, params);
 
@@ -76,7 +66,7 @@ exports.getComments = async (req, res) => {
  * Add a comment or reply
  */
 exports.addComment = async (req, res) => {
-  const { video_id, reel_id, parent_id, content } = req.body;
+  const { video_id, parent_id, content } = req.body;
   const userId = req.user ? req.user.id : null;
   const ipAddress = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
 
@@ -86,11 +76,10 @@ exports.addComment = async (req, res) => {
 
   try {
     const [result] = await db.query(
-      `INSERT INTO comments (video_id, reel_id, parent_id, user_id, ip_address, content) 
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO comments (video_id, parent_id, user_id, ip_address, content) 
+       VALUES (?, ?, ?, ?, ?)`,
       [
         video_id ? parseInt(video_id) : null,
-        reel_id ? parseInt(reel_id) : null,
         parent_id ? parseInt(parent_id) : null,
         userId,
         ipAddress,
@@ -103,10 +92,6 @@ exports.addComment = async (req, res) => {
       await cache.del(`comments_video_${video_id}`);
       // Clear watch page cache
       await cache.del(`video_${video_id}`);
-    }
-    if (reel_id) {
-      await cache.del(`comments_reel_${reel_id}`);
-      await cache.del(`reel_${reel_id}`);
     }
 
     // Return the created comment
@@ -154,10 +139,6 @@ exports.deleteComment = async (req, res) => {
       await cache.del(`comments_video_${comment.video_id}`);
       await cache.del(`video_${comment.video_id}`);
     }
-    if (comment.reel_id) {
-      await cache.del(`comments_reel_${comment.reel_id}`);
-      await cache.del(`reel_${comment.reel_id}`);
-    }
 
     res.json({ message: 'Comment deleted successfully.' });
   } catch (err) {
@@ -195,12 +176,11 @@ exports.likeComment = async (req, res) => {
       liked = true;
     }
 
-    // Find the comment parent video/reel to clear the comments cache
-    const [comments] = await db.query('SELECT video_id, reel_id FROM comments WHERE id = ?', [commentId]);
+    // Find the comment parent video to clear the comments cache
+    const [comments] = await db.query('SELECT video_id FROM comments WHERE id = ?', [commentId]);
     if (comments.length > 0) {
       const c = comments[0];
       if (c.video_id) await cache.del(`comments_video_${c.video_id}`);
-      if (c.reel_id) await cache.del(`comments_reel_${c.reel_id}`);
     }
 
     res.json({ liked });

@@ -36,39 +36,29 @@ class TranscodeQueue {
     console.log(`[Queue] Starting transcoding job for ${job.type} ID ${job.id}.`);
     
     try {
-      // 1. Run FFmpeg transcoding to HLS
-      await transcodeToHLS(job.inputPath, job.outputPath, job.height);
+      // 1. Run ultra-fast stream-copy or single-pass conversion
+      await transcodeToHLS(job.inputPath, job.outputPath, job.height, !!job.isWebReady);
 
-      // Find the associated upload_queue session for status transitions
+      // Find the associated upload_queue session for status update
       const [sessions] = await db.query(
-        'SELECT upload_id, status FROM upload_queue WHERE video_id = ? AND upload_type = ?',
-        [job.id, job.type]
+        'SELECT upload_id, status FROM upload_queue WHERE video_id = ?',
+        [job.id]
       );
       const session = sessions[0];
 
       if (session && session.status !== 'cancelled') {
-        // Transition 1: Generating Thumbnail
-        await db.query('UPDATE upload_queue SET status = "generating_thumbnail" WHERE upload_id = ?', [session.upload_id]);
-        await sleep(1500);
-
-        // Transition 2: Saving Metadata
-        await db.query('UPDATE upload_queue SET status = "saving_metadata" WHERE upload_id = ?', [session.upload_id]);
-        await sleep(1500);
-
-        // Finalize: Completed
         await db.query('UPDATE upload_queue SET status = "completed" WHERE upload_id = ?', [session.upload_id]);
       }
 
       // 2. Update Database Record
-      const table = job.type === 'video' ? 'videos' : 'reels';
-      const webPath = `/uploads/processed/${job.type}s/${job.id}/master.m3u8`;
+      const webPath = `/uploads/processed/videos/${job.id}/master.m3u8`;
       
       await db.query(
-        `UPDATE ${table} SET file_path = ?, status = 'ready' WHERE id = ?`,
+        `UPDATE videos SET file_path = ?, status = 'ready' WHERE id = ?`,
         [webPath, job.id]
       );
 
-      console.log(`[Queue] Job succeeded for ${job.type} ID ${job.id}. Transcoded HLS manifest: ${webPath}`);
+      console.log(`[Queue] Job succeeded for video ID ${job.id}. Transcoded HLS manifest: ${webPath}`);
 
       // 3. Clean up the temporary original file
       if (fs.existsSync(job.inputPath)) {
@@ -78,23 +68,20 @@ class TranscodeQueue {
 
       // 4. Invalidate Cache so the new video displays instantly
       await cache.del('feed_videos_*');
-      await cache.del('feed_reels_*');
       await cache.del(`video_${job.id}`);
-      await cache.del(`reel_${job.id}`);
-      console.log('[Queue] Invalidated related video/reels caches.');
+      console.log('[Queue] Invalidated related video caches.');
 
     } catch (err) {
-      console.error(`[Queue] Transcoding failed for ${job.type} ID ${job.id}:`, err.message);
+      console.error(`[Queue] Transcoding failed for video ID ${job.id}:`, err.message);
       
       // Update upload_queue to failed
       await db.query(
-        'UPDATE upload_queue SET status = "failed" WHERE video_id = ? AND upload_type = ?',
-        [job.id, job.type]
+        'UPDATE upload_queue SET status = "failed" WHERE video_id = ?',
+        [job.id]
       );
 
-      const table = job.type === 'video' ? 'videos' : 'reels';
       await db.query(
-        `UPDATE ${table} SET status = 'failed' WHERE id = ?`,
+        `UPDATE videos SET status = 'failed' WHERE id = ?`,
         [job.id]
       );
 

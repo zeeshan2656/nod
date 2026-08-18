@@ -137,7 +137,7 @@ export default function AdminSettings() {
                 className="form-input"
                 value={siteName}
                 onChange={(e) => setSiteName(e.target.value)}
-                placeholder="e.g. FREE HUB Video & Reels"
+                placeholder="e.g. FREE HUB Video Platform"
                 disabled={savingSettings}
                 required
               />

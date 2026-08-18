@@ -75,6 +75,26 @@ router.post(
   videoController.embedVideo
 );
 
+// Server Media Library endpoints (Admin-only for direct server uploads)
+router.get(
+  '/server-media',
+  requireAdmin,
+  videoController.listServerMedia
+);
+
+router.get(
+  '/server-media/thumbnail',
+  requireAdmin,
+  videoController.streamServerMediaThumbnail
+);
+
+router.post(
+  '/create-from-media',
+  requireAdmin,
+  authLimiter,
+  videoController.createVideoFromMedia
+);
+
 // Fetch external video metadata (Admin-only)
 router.get(
   '/fetch-metadata',

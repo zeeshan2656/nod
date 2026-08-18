@@ -370,11 +370,6 @@ function QueueItemRow({ item, onEdit, onRemove }) {
             <span style={{ fontSize: '11px', color: getStatusColor(item.status), fontWeight: '500' }}>
               {getStatusLabel(item.status, item.progress, item.speed)}
             </span>
-            {item.uploadType === 'reel' && (
-              <span style={{ fontSize: '9px', backgroundColor: 'rgba(168, 85, 247, 0.2)', border: '1px solid rgba(168, 85, 247, 0.4)', color: '#d8b4fe', padding: '0px 4px', borderRadius: '3px' }}>
-                Reel
-              </span>
-            )}
           </div>
         </div>
 

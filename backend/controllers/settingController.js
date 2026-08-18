@@ -87,20 +87,11 @@ exports.getStats = async (req, res) => {
     }
 
     const [[videosCountRow]] = await db.query('SELECT COUNT(*) AS total FROM videos');
-    const [[reelsCountRow]] = await db.query('SELECT COUNT(*) AS total FROM reels');
     const [[commentsCountRow]] = await db.query('SELECT COUNT(*) AS total FROM comments');
-    
-    const [[totalViewsRow]] = await db.query(`
-      SELECT COALESCE(SUM(views), 0) AS total FROM (
-        SELECT SUM(views_count) AS views FROM videos
-        UNION ALL
-        SELECT SUM(views_count) AS views FROM reels
-      ) AS t
-    `);
+    const [[totalViewsRow]] = await db.query('SELECT COALESCE(SUM(views_count), 0) AS total FROM videos');
 
     const stats = {
       videos: videosCountRow.total,
-      reels: reelsCountRow.total,
       comments: commentsCountRow.total,
       totalViews: parseInt(totalViewsRow.total || 0, 10)
     };
@@ -136,8 +127,7 @@ exports.getDiagnostics = async (req, res) => {
         }
       },
       inconsistencies: {
-        videos: [],
-        reels: []
+        videos: []
       },
       fileStats: {
         totalTempFiles: 0,
@@ -187,33 +177,6 @@ exports.getDiagnostics = async (req, res) => {
           file_path: video.file_path,
           resolved_disk_path: diskPath,
           issue: 'Video is in processing queue, but temporary upload file is missing on disk.'
-        });
-      }
-    }
-
-    // 3. Scan reels table
-    const [reels] = await db.query('SELECT id, title, file_path, status FROM reels');
-    for (const reel of reels) {
-      const diskPath = resolveDiskPath(reel.file_path);
-      const exists = diskPath ? fs.existsSync(diskPath) : false;
-      
-      if (reel.status === 'ready' && !exists) {
-        reportObj.inconsistencies.reels.push({
-          id: reel.id,
-          title: reel.title,
-          status: reel.status,
-          file_path: reel.file_path,
-          resolved_disk_path: diskPath,
-          issue: 'Database status is ready, but transcoded master.m3u8 is missing on disk.'
-        });
-      } else if (reel.status === 'processing' && !exists) {
-        reportObj.inconsistencies.reels.push({
-          id: reel.id,
-          title: reel.title,
-          status: reel.status,
-          file_path: reel.file_path,
-          resolved_disk_path: diskPath,
-          issue: 'Reel is in processing queue, but temporary upload file is missing on disk.'
         });
       }
     }

@@ -11,6 +11,7 @@ const UPLOAD_ROOT = process.env.STORAGE_PATH
 const TEMP_DIR = path.join(UPLOAD_ROOT, 'temp');
 const TEMP_THUMB_DIR = path.join(TEMP_DIR, 'thumbnails');
 const PROCESSED_DIR = path.join(UPLOAD_ROOT, 'processed', 'videos');
+const MEDIA_DIR = path.join(UPLOAD_ROOT, 'media');
 
 // Helper to resolve absolute or relative database file paths to absolute disk paths
 function resolveDiskPath(filePath) {
@@ -26,6 +27,7 @@ function resolveDiskPath(filePath) {
 if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
 if (!fs.existsSync(TEMP_THUMB_DIR)) fs.mkdirSync(TEMP_THUMB_DIR, { recursive: true });
 if (!fs.existsSync(PROCESSED_DIR)) fs.mkdirSync(PROCESSED_DIR, { recursive: true });
+if (!fs.existsSync(MEDIA_DIR)) fs.mkdirSync(MEDIA_DIR, { recursive: true });
 
 /**
  * Helper to delete a folder recursively (for cleanups)
@@ -228,7 +230,14 @@ exports.getVideo = async (req, res) => {
   const id = parseInt(req.params.id);
   if (isNaN(id)) return res.status(400).json({ error: 'Invalid video ID.' });
 
+  const cacheKey = `video_${id}`;
+
   try {
+    const cached = await cache.get(cacheKey);
+    if (cached) {
+      return res.json(cached);
+    }
+
     const [rows] = await db.query(
       `SELECT v.*, (SELECT COUNT(*) FROM comments WHERE video_id = v.id) as comments_count 
        FROM videos v 
@@ -240,6 +249,9 @@ exports.getVideo = async (req, res) => {
     if (!video) {
       return res.status(404).json({ error: 'Video not found.' });
     }
+
+    // Cache for 15 seconds for blazing fast instant player loads
+    await cache.set(cacheKey, video, 15);
 
     res.json(video);
   } catch (err) {
@@ -370,32 +382,45 @@ exports.getTemporaryThumbnails = async (req, res) => {
 
     // Resolve path to disk
     const sourcePath = resolveDiskPath(video.file_path);
+    const fileDir = path.dirname(sourcePath);
+    let targetFile = sourcePath;
+
+    // If target is master.m3u8, resolve directly to video.mp4 or playlist.m3u8 in same folder
+    if (sourcePath.endsWith('master.m3u8')) {
+      const mp4Candidate = path.join(fileDir, 'video.mp4');
+      const playlistCandidate = path.join(fileDir, 'playlist.m3u8');
+      if (fs.existsSync(mp4Candidate)) {
+        targetFile = mp4Candidate;
+      } else if (fs.existsSync(playlistCandidate)) {
+        targetFile = playlistCandidate;
+      }
+    }
 
     // 2. Verify file is physically present on disk
-    if (!fs.existsSync(sourcePath)) {
-      console.error(`[Edit Diagnostics] File physically missing at path: ${sourcePath}`);
-      return res.status(404).json({ error: 'Video file missing', detail: `Video file is physically missing at path: ${sourcePath}` });
+    if (!fs.existsSync(targetFile)) {
+      console.error(`[Edit Diagnostics] File physically missing at path: ${targetFile}`);
+      return res.status(404).json({ error: 'Video file missing', detail: `Video file is physically missing at path: ${targetFile}` });
     }
 
     // 3. Verify read permissions
     try {
-      fs.accessSync(sourcePath, fs.constants.R_OK);
+      fs.accessSync(targetFile, fs.constants.R_OK);
     } catch (permErr) {
-      console.error(`[Edit Diagnostics] Read permission denied for path: ${sourcePath}`);
-      return res.status(403).json({ error: 'Permission denied', detail: `No read permissions on file: ${sourcePath}. system error: ${permErr.message}` });
+      console.error(`[Edit Diagnostics] Read permission denied for path: ${targetFile}`);
+      return res.status(403).json({ error: 'Permission denied', detail: `No read permissions on file: ${targetFile}. system error: ${permErr.message}` });
     }
 
     // 4 & 5. Verify FFmpeg access and video metadata extraction (corrupted file check)
-    const { execSync } = require('child_process');
+    const { execSync, spawnSync } = require('child_process');
     try {
-      const probeCmd = `"${ffprobePath}" -v error -select_streams v:0 -show_entries stream=codec_name -of json "${sourcePath}"`;
-      const probeOut = execSync(probeCmd).toString();
+      const probeCmd = `"${ffprobePath}" -v error -select_streams v:0 -show_entries stream=codec_name -of json "${targetFile}"`;
+      const probeOut = execSync(probeCmd, { cwd: fileDir }).toString();
       const probeData = JSON.parse(probeOut);
       if (!probeData.streams || probeData.streams.length === 0) {
         throw new Error('No valid video stream detected in media file container.');
       }
     } catch (probeErr) {
-      console.error(`[Edit Diagnostics] Probe failed for ${sourcePath}. Error: ${probeErr.message}`);
+      console.error(`[Edit Diagnostics] Probe failed for ${targetFile}. Error: ${probeErr.message}`);
       const isExecMissing = probeErr.message.includes('not recognized') || probeErr.message.includes('cannot find') || probeErr.message.includes('ENOENT');
       if (isExecMissing) {
         return res.status(500).json({ error: 'FFmpeg error', detail: 'The ffprobe/ffmpeg binaries could not be executed in the environment.' });
@@ -411,7 +436,6 @@ exports.getTemporaryThumbnails = async (req, res) => {
     }
 
     const thumbUrls = [];
-    const { spawnSync } = require('child_process');
 
     // Extract 30 frames sequentially
     for (let i = 1; i <= 30; i++) {
@@ -421,7 +445,7 @@ exports.getTemporaryThumbnails = async (req, res) => {
 
       const ffmpegArgs = [
         '-ss', timestamp.toFixed(3),
-        '-i', sourcePath,
+        '-i', targetFile,
         '-threads', '2',
         '-vframes', '1',
         '-vf', 'scale=1280:-1',
@@ -430,15 +454,11 @@ exports.getTemporaryThumbnails = async (req, res) => {
         '-y', outFilePath
       ];
 
-      // Spawn FFmpeg to extract frame on disk
-      const ffProcess = spawnSync(ffmpegPath, ffmpegArgs);
+      // Spawn FFmpeg with cwd set to fileDir for proper HLS playlist resolution
+      const ffProcess = spawnSync(ffmpegPath, ffmpegArgs, { cwd: fileDir });
       
       if (ffProcess.status !== 0) {
-        console.error(`[Edit Diagnostics] FFmpeg extraction failed for frame ${i}:`, ffProcess.stderr.toString());
-        return res.status(500).json({ 
-          error: 'FFmpeg error', 
-          detail: `FFmpeg failed to extract frame ${i} at timestamp ${timestamp}. Stderr: ${ffProcess.stderr.toString()}` 
-        });
+        console.warn(`[Edit Diagnostics] FFmpeg extraction warning for frame ${i}:`, ffProcess.stderr ? ffProcess.stderr.toString() : '');
       }
 
       // Verify file was written
@@ -448,6 +468,13 @@ exports.getTemporaryThumbnails = async (req, res) => {
           url: `/uploads/temp/thumbnails/${id}/${outFileName}`
         });
       }
+    }
+
+    if (thumbUrls.length === 0) {
+      return res.status(500).json({
+        error: 'FFmpeg error',
+        detail: 'Could not extract any preview frames from the video.'
+      });
     }
 
     res.json({
@@ -901,3 +928,225 @@ exports.fetchExternalMetadata = async (req, res) => {
     res.status(500).json({ error: 'Failed to retrieve external video metadata.' });
   }
 };
+
+/**
+ * Format bytes to human readable size
+ */
+function formatBytes(bytes) {
+  if (!bytes || bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+/**
+ * List unposted videos directly uploaded to the server (storage/media/) (Admin-only)
+ */
+exports.listServerMedia = async (req, res) => {
+  try {
+    if (!fs.existsSync(MEDIA_DIR)) {
+      fs.mkdirSync(MEDIA_DIR, { recursive: true });
+    }
+
+    const allowedExts = new Set(['.mp4', '.mkv', '.webm', '.avi', '.mov', '.m4v', '.flv', '.wmv', '.ts']);
+    const allFiles = fs.readdirSync(MEDIA_DIR);
+
+    // Get list of existing video file_path entries from the database
+    const [existingVideos] = await db.query('SELECT file_path FROM videos WHERE file_path IS NOT NULL');
+    const existingFileNames = new Set();
+    
+    existingVideos.forEach(v => {
+      if (v.file_path) {
+        existingFileNames.add(path.basename(v.file_path));
+      }
+    });
+
+    const mediaList = [];
+
+    for (const fileName of allFiles) {
+      const ext = path.extname(fileName).toLowerCase();
+      if (!allowedExts.has(ext)) continue;
+
+      // Skip files already created as posts
+      if (existingFileNames.has(fileName)) continue;
+
+      const fullPath = path.join(MEDIA_DIR, fileName);
+      try {
+        const stats = fs.statSync(fullPath);
+        if (!stats.isFile()) continue;
+
+        let duration = 0;
+        let width = 0;
+        let height = 0;
+        let aspectRatio = '16:9';
+
+        try {
+          const meta = await getVideoMetadata(fullPath);
+          duration = Math.round(meta.duration || 0);
+          width = meta.width || 0;
+          height = meta.height || 0;
+          aspectRatio = meta.aspect_ratio || '16:9';
+        } catch (metaErr) {
+          console.warn(`Could not probe metadata for server media ${fileName}:`, metaErr.message);
+        }
+
+        mediaList.push({
+          fileName,
+          filename: fileName,
+          filePath: `/uploads/media/${encodeURIComponent(fileName)}`,
+          fileSize: formatBytes(stats.size),
+          fileSizeBytes: stats.size,
+          sizeFormatted: formatBytes(stats.size),
+          duration,
+          width,
+          height,
+          aspectRatio,
+          modifiedAt: stats.mtime,
+          thumbnailUrl: `/api/videos/server-media/thumbnail?file=${encodeURIComponent(fileName)}`
+        });
+      } catch (fileErr) {
+        console.warn(`Error reading server media file stats for ${fileName}:`, fileErr.message);
+      }
+    }
+
+    // Sort by newest modified date first
+    mediaList.sort((a, b) => new Date(b.modifiedAt) - new Date(a.modifiedAt));
+
+    res.json({
+      mediaDir: 'storage/media',
+      count: mediaList.length,
+      files: mediaList
+    });
+  } catch (err) {
+    console.error('List server media error:', err);
+    res.status(500).json({ error: 'Failed to scan server media directory.' });
+  }
+};
+
+/**
+ * Stream on-demand preview thumbnail for server media files (Admin-only)
+ */
+exports.streamServerMediaThumbnail = async (req, res) => {
+  const fileParam = req.query.file || req.query.filename;
+  if (!fileParam) {
+    return res.status(400).json({ error: 'Missing file parameter.' });
+  }
+
+  const safeFileName = path.basename(fileParam);
+  const targetPath = path.join(MEDIA_DIR, safeFileName);
+
+  if (!fs.existsSync(targetPath)) {
+    return res.status(404).json({ error: 'Media file not found on server.' });
+  }
+
+  try {
+    let timestamp = 1.0;
+    try {
+      const meta = await getVideoMetadata(targetPath);
+      if (meta.duration && meta.duration > 0) {
+        timestamp = Math.min(1.0, meta.duration * 0.1);
+      }
+    } catch (_) {}
+
+    const imgBuffer = await extractFrameToBuffer(targetPath, timestamp);
+    res.setHeader('Content-Type', 'image/jpeg');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    res.send(imgBuffer);
+  } catch (err) {
+    console.error('Server media thumbnail extraction failed:', err);
+    res.status(500).json({ error: 'Could not extract media thumbnail.' });
+  }
+};
+
+/**
+ * Create a new website video post from an already-uploaded server video (Admin-only)
+ */
+exports.createVideoFromMedia = async (req, res) => {
+  const targetFile = req.body.fileName || req.body.filename;
+  const { title, description, thumbnail_position } = req.body;
+
+  if (!targetFile) {
+    return res.status(400).json({ error: 'File name is required.' });
+  }
+
+  const safeFileName = path.basename(targetFile);
+  const sourcePath = path.join(MEDIA_DIR, safeFileName);
+
+  if (!fs.existsSync(sourcePath)) {
+    return res.status(404).json({ error: `File "${safeFileName}" not found in server media storage.` });
+  }
+
+  try {
+    // 1. Extract metadata via ffprobe
+    const metadata = await getVideoMetadata(sourcePath);
+
+    // 2. Generate a unique temp file path and move the file into the transcoding queue pipeline
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    const tempFileName = `video-${uniqueSuffix}${path.extname(safeFileName)}`;
+    const tempFilePath = path.join(TEMP_DIR, tempFileName);
+
+    try {
+      fs.renameSync(sourcePath, tempFilePath);
+    } catch (moveErr) {
+      // If rename fails across partitions, copy and unlink
+      fs.copyFileSync(sourcePath, tempFilePath);
+      fs.unlinkSync(sourcePath);
+    }
+
+    // 3. Clean and prepare title
+    const finalTitle = title && title.trim()
+      ? title.trim()
+      : path.parse(safeFileName).name.replace(/[-_]+/g, ' ');
+
+    // 4. Determine initial status and output path
+    const isWebReady = !!metadata.isWebReady;
+    const initialStatus = 'processing';
+
+    const [result] = await db.query(
+      `INSERT INTO videos 
+       (title, description, duration, width, height, aspect_ratio, file_size, file_path, thumbnail_position, status) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?)`,
+      [
+        finalTitle,
+        description ? description.trim() : '',
+        metadata.duration || 0,
+        metadata.width || 0,
+        metadata.height || 0,
+        metadata.aspect_ratio || '16:9',
+        metadata.file_size || 0,
+        tempFilePath,
+        initialStatus
+      ]
+    );
+
+    const videoId = result.insertId;
+    const videoOutputDir = path.join(PROCESSED_DIR, videoId.toString());
+
+    // 5. Add to fast queue for instant stream-copy / faststart HLS
+    transcodeQueue.addJob({
+      id: videoId,
+      type: 'video',
+      inputPath: tempFilePath,
+      outputPath: videoOutputDir,
+      height: metadata.height || 720,
+      isWebReady
+    });
+
+    // Invalidate list caches
+    await cache.del('feed_videos_*');
+
+    res.status(201).json({
+      message: 'Video post created successfully.',
+      videoId,
+      title: finalTitle,
+      duration: metadata.duration,
+      status: 'ready'
+    });
+
+  } catch (err) {
+    console.error('Create video from server media failed:', err);
+    res.status(500).json({ error: `Failed to create video post: ${err.message}` });
+  }
+};
+

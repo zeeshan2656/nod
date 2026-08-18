@@ -8,9 +8,9 @@ import UploadQueuePanel from './components/UploadQueuePanel';
 import UploadDetailsModal from './components/UploadDetailsModal';
 
 // Lazy-loaded pages (Code-splitting to reduce initial bundle footprint, boosting PageSpeed score)
+// Lazy-loaded pages (Code-splitting to reduce initial bundle footprint, boosting PageSpeed score)
 const Home = lazy(() => import('./pages/Home'));
 const Watch = lazy(() => import('./pages/Watch'));
-const Reels = lazy(() => import('./pages/Reels'));
 const Login = lazy(() => import('./pages/Login'));
 const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
 const AdminUpload = lazy(() => import('./pages/AdminUpload'));
@@ -28,9 +28,6 @@ function AppLayout() {
   const [isMobileSearchExpanded, setIsMobileSearchExpanded] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const debounceTimeoutRef = useRef(null);
-
-  const isWatchPage = location.pathname.startsWith('/watch/');
-  const isReelsPage = location.pathname.startsWith('/reels');
 
   // Sync search input with search param in URL
   useEffect(() => {
@@ -109,30 +106,6 @@ function AppLayout() {
           >
             Home
           </NavLink>
-          <NavLink 
-            to="/reels" 
-            onClick={() => setIsSidebarOpen(false)} 
-            className={({ isActive }) => `sidebar-nav-item ${isActive ? 'active' : ''}`}
-            style={{ fontSize: '15px', fontWeight: '600', padding: '10px 14px', borderRadius: '4px', display: 'block', color: 'var(--text-color, #fff)' }}
-          >
-            Reels
-          </NavLink>
-          <NavLink 
-            to="/" 
-            onClick={() => setIsSidebarOpen(false)} 
-            className="sidebar-nav-item"
-            style={{ fontSize: '15px', fontWeight: '600', padding: '10px 14px', borderRadius: '4px', display: 'block', color: 'var(--text-muted, #aaa)' }}
-          >
-            Categories
-          </NavLink>
-          <NavLink 
-            to="/" 
-            onClick={() => setIsSidebarOpen(false)} 
-            className="sidebar-nav-item"
-            style={{ fontSize: '15px', fontWeight: '600', padding: '10px 14px', borderRadius: '4px', display: 'block', color: 'var(--text-muted, #aaa)' }}
-          >
-            Trending
-          </NavLink>
           {isAdmin && (
             <NavLink 
               to="/admin" 
@@ -195,151 +168,107 @@ function AppLayout() {
           }}
         />
       )}
-    
-      {isReelsPage ? (
-        /* Reels Overlay Back Button always visible fixed top-left */
-        <div className="reels-navigation-overlay" style={{
-          position: 'fixed',
-          top: '16px',
-          left: '16px',
-          zIndex: 2000
-        }}>
-          <Link to="/" className="reels-back-btn" style={{
-            color: '#fff',
-            fontSize: '28px',
-            cursor: 'pointer',
-            textShadow: '0 1px 4px rgba(0,0,0,0.8)',
-            display: 'inline-block',
-            lineHeight: 1
-          }}>
-            ←
-          </Link>
-        </div>
-      ) : (
-        /* Top navbar on all pages (unified design) */
-        <header className="header-top" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative' }}>
-          
-          {/* Mobile Hamburger Toggle Menu Button */}
-          {!isMobileSearchExpanded && (
-            <button 
-              type="button" 
-              className="mobile-menu-toggle"
-              onClick={() => setIsSidebarOpen(true)}
-              style={{
-                fontSize: '22px',
-                color: '#fff',
-                cursor: 'pointer',
-                display: 'none', // Block on mobile in CSS
-                padding: '6px 12px',
-                background: 'none',
-                border: 'none',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}
-            >
-              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
-                <line x1="3" y1="12" x2="21" y2="12"></line>
-                <line x1="3" y1="6" x2="21" y2="6"></line>
-                <line x1="3" y1="18" x2="21" y2="18"></line>
-              </svg>
-            </button>
-          )}
 
-          <Link to="/" className={`logo ${isMobileSearchExpanded ? 'mobile-hidden' : ''}`}>
-            <div className="logo-dot" />
-            <span>FREE HUB</span>
-          </Link>
+      {/* Top navbar on all pages (unified design) */}
+      <header className="header-top" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', position: 'relative' }}>
+        
+        {/* Mobile Hamburger Toggle Menu Button */}
+        {!isMobileSearchExpanded && (
+          <button 
+            type="button" 
+            className="mobile-menu-toggle"
+            onClick={() => setIsSidebarOpen(true)}
+            style={{
+              fontSize: '22px',
+              color: '#fff',
+              cursor: 'pointer',
+              display: 'none',
+              padding: '6px 12px',
+              background: 'none',
+              border: 'none',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
+              <line x1="3" y1="12" x2="21" y2="12"></line>
+              <line x1="3" y1="6" x2="21" y2="6"></line>
+              <line x1="3" y1="18" x2="21" y2="18"></line>
+            </svg>
+          </button>
+        )}
 
-          {/* Search bar wrapper */}
-          <div className={`header-search-container ${isMobileSearchExpanded ? 'expanded' : ''}`}>
-            <input
-              type="text"
-              placeholder="Search videos..."
-              value={searchTerm}
-              onChange={handleSearchChange}
-              className="header-search-input"
-            />
-            {isMobileSearchExpanded && (
-              <button
-                type="button"
-                onClick={() => {
-                  setIsMobileSearchExpanded(false);
-                  setSearchTerm('');
-                  setSearchParams({});
-                  if (location.pathname !== '/') {
-                    navigate('/');
-                  }
-                }}
-                className="header-search-close-btn"
-              >
-                ✕
-              </button>
-            )}
-          </div>
+        <Link to="/" className={`logo ${isMobileSearchExpanded ? 'mobile-hidden' : ''}`}>
+          <div className="logo-dot" />
+          <span>FREE HUB</span>
+        </Link>
 
-          <nav className={`nav-links ${isMobileSearchExpanded ? 'mobile-hidden' : ''}`}>
-            {/* Reels Icon on Mobile Header */}
-            <Link 
-              to="/reels" 
-              className="mobile-reels-trigger" 
-              style={{ display: 'none', color: '#fff' }} // Block on mobile in CSS
-              title="Watch Reels"
-            >
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
-                <rect x="2" y="2" width="20" height="20" rx="2.18" ry="2.18"></rect>
-                <line x1="7" y1="2" x2="7" y2="22"></line>
-                <line x1="17" y1="2" x2="17" y2="22"></line>
-                <line x1="2" y1="12" x2="22" y2="12"></line>
-                <line x1="2" y1="7" x2="7" y2="7"></line>
-                <line x1="2" y1="17" x2="7" y2="17"></line>
-                <line x1="17" y1="17" x2="22" y2="17"></line>
-                <line x1="17" y1="7" x2="22" y2="7"></line>
-              </svg>
-            </Link>
-
-            {/* Mobile Search Icon trigger */}
+        {/* Search bar wrapper */}
+        <div className={`header-search-container ${isMobileSearchExpanded ? 'expanded' : ''}`}>
+          <input
+            type="text"
+            placeholder="Search videos..."
+            value={searchTerm}
+            onChange={handleSearchChange}
+            className="header-search-input"
+          />
+          {isMobileSearchExpanded && (
             <button
               type="button"
-              className="mobile-search-trigger"
-              onClick={() => setIsMobileSearchExpanded(true)}
-              style={{ color: '#fff' }}
+              onClick={() => {
+                setIsMobileSearchExpanded(false);
+                setSearchTerm('');
+                setSearchParams({});
+                if (location.pathname !== '/') {
+                  navigate('/');
+                }
+              }}
+              className="header-search-close-btn"
             >
-              <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
-                <circle cx="11" cy="11" r="8"></circle>
-                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-              </svg>
+              ✕
             </button>
+          )}
+        </div>
 
-            <NavLink to="/" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-              Home
-            </NavLink>
-            <NavLink to="/reels" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-              Reels
-            </NavLink>
-            {isAdmin && (
-              <NavLink to="/admin" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-                Admin
-              </NavLink>
-            )}
-            {user ? (
-              <button onClick={logout} className="nav-item" style={{ cursor: 'pointer', border: 'none', background: 'none' }}>
-                Sign Out
-              </button>
-            ) : (
-              <NavLink to="/login" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
-                Sign In
-              </NavLink>
-            )}
-          </nav>
-        </header>
-      )}
+        <nav className={`nav-links ${isMobileSearchExpanded ? 'mobile-hidden' : ''}`}>
+          {/* Mobile Search Icon trigger */}
+          <button
+            type="button"
+            className="mobile-search-trigger"
+            onClick={() => setIsMobileSearchExpanded(true)}
+            style={{ color: '#fff' }}
+          >
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }}>
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+          </button>
 
-      <main className={isReelsPage ? 'main-reels' : 'main-top'} style={{ padding: '0 0' }}>
+          <NavLink to="/" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+            Home
+          </NavLink>
+          {isAdmin && (
+            <NavLink to="/admin" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+              Admin
+            </NavLink>
+          )}
+          {user ? (
+            <button onClick={logout} className="nav-item" style={{ cursor: 'pointer', border: 'none', background: 'none' }}>
+              Sign Out
+            </button>
+          ) : (
+            <NavLink to="/login" className={({ isActive }) => `nav-item ${isActive ? 'active' : ''}`}>
+              Sign In
+            </NavLink>
+          )}
+        </nav>
+      </header>
+
+      <main className="main-top" style={{ padding: '0 0' }}>
         <Suspense fallback={<div style={{ textAlign: 'center', padding: '50px', color: 'var(--text-muted)' }}>Loading...</div>}>
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/watch/:id" element={<Watch />} />
-            <Route path="/reels" element={<Reels />} />
             <Route path="/login" element={<Login />} />
             <Route path="/admin" element={<AdminDashboard />} />
             <Route path="/admin/upload" element={<AdminUpload />} />
@@ -350,26 +279,24 @@ function AppLayout() {
         </Suspense>
       </main>
 
-      {!isReelsPage && (
-        <footer style={{ 
-          padding: '16px', 
-          borderTop: '1px solid var(--border-color)', 
-          textAlign: 'center', 
-          fontSize: '11px', 
-          color: 'var(--text-muted)',
-          marginTop: 'auto',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: '12px'
-        }}>
-          <AdPlacement placement="footer_desktop" className="footer-ad-desktop" style={{ width: '100%', display: 'flex', justifyContent: 'center', margin: '8px 0' }} />
-          <AdPlacement placement="footer_mobile" className="footer-ad-mobile" style={{ width: '100%', display: 'flex', justifyContent: 'center', margin: '8px 0' }} />
-          <div>
-            © {new Date().getFullYear()} FREE HUB Video Platform. Designed for performance.
-          </div>
-        </footer>
-      )}
+      <footer style={{ 
+        padding: '16px', 
+        borderTop: '1px solid var(--border-color)', 
+        textAlign: 'center', 
+        fontSize: '11px', 
+        color: 'var(--text-muted)',
+        marginTop: 'auto',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        gap: '12px'
+      }}>
+        <AdPlacement placement="footer_desktop" className="footer-ad-desktop" style={{ width: '100%', display: 'flex', justifyContent: 'center', margin: '8px 0' }} />
+        <AdPlacement placement="footer_mobile" className="footer-ad-mobile" style={{ width: '100%', display: 'flex', justifyContent: 'center', margin: '8px 0' }} />
+        <div>
+          © {new Date().getFullYear()} FREE HUB Video Platform. Designed for performance.
+        </div>
+      </footer>
       {/* Background Upload Queue Panels */}
       <UploadQueuePanel />
       <UploadDetailsModal />

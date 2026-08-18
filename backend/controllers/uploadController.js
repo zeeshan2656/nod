@@ -9,12 +9,10 @@ const UPLOAD_ROOT = process.env.STORAGE_PATH
   : path.join(__dirname, '..', '..', '..', 'storage');
 const TEMP_DIR = path.join(UPLOAD_ROOT, 'temp');
 const PROCESSED_DIR = path.join(UPLOAD_ROOT, 'processed', 'videos');
-const PROCESSED_REELS_DIR = path.join(UPLOAD_ROOT, 'processed', 'reels');
 
 // Ensure directories exist
 if (!fs.existsSync(TEMP_DIR)) fs.mkdirSync(TEMP_DIR, { recursive: true });
 if (!fs.existsSync(PROCESSED_DIR)) fs.mkdirSync(PROCESSED_DIR, { recursive: true });
-if (!fs.existsSync(PROCESSED_REELS_DIR)) fs.mkdirSync(PROCESSED_REELS_DIR, { recursive: true });
 
 /**
  * 1. Initiate Upload Session
@@ -28,8 +26,7 @@ exports.initiateUpload = async (req, res) => {
     fileSize, 
     duration, 
     width, 
-    height, 
-    uploadType 
+    height 
   } = req.body;
 
   if (!uploadId || !fileName || !fileSize) {
@@ -47,7 +44,7 @@ exports.initiateUpload = async (req, res) => {
     await db.query(
       `INSERT INTO upload_queue 
        (upload_id, title, description, file_name, file_size, uploaded_bytes, status, duration, width, height, upload_type) 
-       VALUES (?, ?, ?, ?, ?, 0, 'queued', ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, 0, 'queued', ?, ?, ?, 'video')`,
       [
         uploadId, 
         title || path.parse(fileName).name, 
@@ -56,8 +53,7 @@ exports.initiateUpload = async (req, res) => {
         fileSize, 
         duration || 0, 
         width || 0, 
-        height || 0, 
-        uploadType || 'video'
+        height || 0
       ]
     );
 
@@ -156,7 +152,7 @@ exports.uploadChunk = async (req, res) => {
         [uploadId]
       );
 
-      // Create permanent record in either 'videos' or 'reels' table
+      // Create permanent record in 'videos' table
       const title = uploadSession.title || path.parse(uploadSession.file_name).name;
       const fileExt = path.extname(uploadSession.file_name);
       
@@ -166,58 +162,39 @@ exports.uploadChunk = async (req, res) => {
       
       fs.renameSync(tempFilePath, finalOriginalPath);
 
-      let videoId;
-      if (uploadSession.upload_type === 'reel') {
-        const [result] = await db.query(
-          `INSERT INTO reels 
-           (title, description, duration, width, height, file_path, status) 
-           VALUES (?, ?, ?, ?, ?, ?, 'processing')`,
-          [
-            title, 
-            uploadSession.description || '', 
-            uploadSession.duration || 0, 
-            uploadSession.width || 0, 
-            uploadSession.height || 0, 
-            finalOriginalPath
-          ]
-        );
-        videoId = result.insertId;
+      const [result] = await db.query(
+        `INSERT INTO videos 
+         (title, description, duration, width, height, aspect_ratio, file_size, file_path, thumbnail_position, status) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 'processing')`,
+        [
+          title, 
+          uploadSession.description || '', 
+          uploadSession.duration || 0, 
+          uploadSession.width || 0, 
+          uploadSession.height || 0, 
+          (uploadSession.width && uploadSession.height) ? `${uploadSession.width}:${uploadSession.height}` : '16:9',
+          uploadSession.file_size,
+          finalOriginalPath
+        ]
+      );
+      const videoId = result.insertId;
 
-        const outputDir = path.join(PROCESSED_REELS_DIR, videoId.toString());
-        transcodeQueue.addJob({
-          id: videoId,
-          type: 'reel',
-          inputPath: finalOriginalPath,
-          outputPath: outputDir,
-          height: uploadSession.height || 720
-        });
-      } else {
-        const [result] = await db.query(
-          `INSERT INTO videos 
-           (title, description, duration, width, height, aspect_ratio, file_size, file_path, thumbnail_position, status) 
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 'processing')`,
-          [
-            title, 
-            uploadSession.description || '', 
-            uploadSession.duration || 0, 
-            uploadSession.width || 0, 
-            uploadSession.height || 0, 
-            (uploadSession.width && uploadSession.height) ? `${uploadSession.width}:${uploadSession.height}` : '16:9',
-            uploadSession.file_size,
-            finalOriginalPath
-          ]
-        );
-        videoId = result.insertId;
+      const outputDir = path.join(PROCESSED_DIR, videoId.toString());
+      let isWebReady = false;
+      try {
+        const { getVideoMetadata } = require('../utils/ffmpegHelper');
+        const meta = await getVideoMetadata(finalOriginalPath);
+        isWebReady = !!meta.isWebReady;
+      } catch (_) {}
 
-        const outputDir = path.join(PROCESSED_DIR, videoId.toString());
-        transcodeQueue.addJob({
-          id: videoId,
-          type: 'video',
-          inputPath: finalOriginalPath,
-          outputPath: outputDir,
-          height: uploadSession.height || 720
-        });
-      }
+      transcodeQueue.addJob({
+        id: videoId,
+        type: 'video',
+        inputPath: finalOriginalPath,
+        outputPath: outputDir,
+        height: uploadSession.height || 720,
+        isWebReady
+      });
 
       // Associate video_id to upload queue record
       await db.query(
@@ -227,7 +204,6 @@ exports.uploadChunk = async (req, res) => {
 
       // Invalidate caches
       await cache.del('feed_videos_*');
-      await cache.del('feed_reels_*');
 
       return res.json({ 
         status: 'processing', 
@@ -312,19 +288,18 @@ exports.updateUploadMetadata = async (req, res) => {
       return res.status(404).json({ error: 'Upload session not found.' });
     }
 
-    // 2. Sync to active video/reel record if already generated
-    const [sessions] = await db.query('SELECT video_id, upload_type FROM upload_queue WHERE upload_id = ?', [uploadId]);
+    // 2. Sync to active video record if already generated
+    const [sessions] = await db.query('SELECT video_id FROM upload_queue WHERE upload_id = ?', [uploadId]);
     const session = sessions[0];
     
     if (session && session.video_id) {
-      const table = session.upload_type === 'reel' ? 'reels' : 'videos';
       await db.query(
-        `UPDATE ${table} SET title = ?, description = ? WHERE id = ?`,
+        'UPDATE videos SET title = ?, description = ? WHERE id = ?',
         [title, description, session.video_id]
       );
       // Invalidate specific cache keys
-      await cache.del(`${session.upload_type}_${session.video_id}`);
-      await cache.del(`feed_${session.upload_type}s_*`);
+      await cache.del(`video_${session.video_id}`);
+      await cache.del('feed_videos_*');
     }
 
     res.json({ message: 'Upload metadata updated successfully.' });
@@ -342,7 +317,7 @@ exports.cancelUpload = async (req, res) => {
 
   try {
     // Get session first
-    const [rows] = await db.query('SELECT video_id, upload_type FROM upload_queue WHERE upload_id = ?', [uploadId]);
+    const [rows] = await db.query('SELECT video_id FROM upload_queue WHERE upload_id = ?', [uploadId]);
     if (rows.length === 0) {
       return res.status(404).json({ error: 'Upload session not found.' });
     }
@@ -358,18 +333,15 @@ exports.cancelUpload = async (req, res) => {
       fs.unlinkSync(tempFilePath);
     }
 
-    // If already inserted into videos/reels, clean it up or mark failed
+    // If already inserted into videos, clean it up
     if (session.video_id) {
-      const table = session.upload_type === 'reel' ? 'reels' : 'videos';
-      
-      // Let's delete it so it's fully cleaned up
-      await db.query(`DELETE FROM ${table} WHERE id = ?`, [session.video_id]);
+      await db.query('DELETE FROM videos WHERE id = ?', [session.video_id]);
       
       // Clean up any processed folders if created
       const hlsDir = path.join(
         UPLOAD_ROOT, 
         'processed', 
-        `${session.upload_type}s`, 
+        'videos', 
         session.video_id.toString()
       );
       if (fs.existsSync(hlsDir)) {
@@ -377,7 +349,6 @@ exports.cancelUpload = async (req, res) => {
       }
 
       await cache.del('feed_videos_*');
-      await cache.del('feed_reels_*');
     }
 
     res.json({ message: 'Upload session cancelled and temporary resources cleaned up.' });
